@@ -1,18 +1,21 @@
 """
 Entry point used by the GitHub Actions daily workflow (and runnable locally):
 
-    fetch -> validate -> update web/data/gold_rates.json -> notify Telegram
+    fetch today's rate + Goodreturns' own "Last 10 Days" history
+        -> validate
+        -> merge into web/data/gold_rates.json
+        -> notify Telegram
 
 This intentionally does not modify run.py / app/main.py -- that CLI pipeline
 (console output + local SQLite history) keeps working exactly as before.
-This script adds the public-JSON side of Phase 2 as a separate, additive
+This script adds the public-JSON side of Phase 2/3 as a separate, additive
 entry point that reuses the same scraper/calculator/telegram modules.
 
-Exit code 0 means the rate was fetched and the JSON file was written
-successfully -- safe for the workflow to commit. Any other exit code means
-nothing should be committed and the last published data must be left
-untouched (this script never writes the JSON file unless the fetch and
-validation both succeeded).
+Exit code 0 means the rate (and history) were fetched and the JSON file was
+written successfully -- safe for the workflow to commit. Any other exit
+code means nothing should be committed and the last published data must be
+left untouched (this script never writes the JSON file unless the fetch,
+history parsing, and validation all succeeded).
 """
 
 from __future__ import annotations
@@ -36,11 +39,11 @@ from app.data_export import (
     build_json_payload,
     find_previous_rate,
     load_existing_json,
-    upsert_history,
+    merge_history_records,
     write_json_atomic,
 )
 from app.database import GoldRateDatabase
-from app.scraper import SOURCE_URL, GoldRateScraperError, get_hyderabad_22k_rate
+from app.scraper import SOURCE_URL, GoldRateScraperError, get_hyderabad_22k_with_history
 from app.telegram_bot import TelegramError, build_message, send_telegram_message
 
 
@@ -58,24 +61,34 @@ def main() -> int:
 
     logger.info("Fetching Goodreturns...")
     try:
-        rate = get_hyderabad_22k_rate()
+        rate, history_rows = get_hyderabad_22k_with_history()
     except GoldRateScraperError as exc:
-        logger.error("Failed to retrieve the gold rate: %s", exc)
-        print(f"ERROR: Could not retrieve the Hyderabad 22K gold rate: {exc}", file=sys.stderr)
+        logger.error("Failed to retrieve the gold rate / history: %s", exc)
+        print(f"ERROR: Could not retrieve Hyderabad 22K data: {exc}", file=sys.stderr)
         print(f"Source attempted: {SOURCE_URL}", file=sys.stderr)
         print("Refusing to update the published data -- last known good data stays live.", file=sys.stderr)
         return 1
+
+    logger.info("Extracted %d historical 22K record(s) from Goodreturns", len(history_rows))
 
     rate_8g = price_for_grams(rate.rate_per_gram, 8)
     rate_10g = price_for_grams(rate.rate_per_gram, 10)
 
     existing = load_existing_json(DEFAULT_JSON_PATH)
-    previous_rate = find_previous_rate(existing, rate.date)
+
+    # Merge Goodreturns' historical rows first, then the authoritative
+    # "current" card last, so it wins if the two ever disagree for today's
+    # date. This never deletes a date we've already collected on an
+    # earlier run -- it only adds/updates by date (see merge_history_records).
+    history = merge_history_records(
+        (existing or {}).get("history", []),
+        list(history_rows) + [rate],
+    )
+
+    # The immediately preceding *available* date, not an assumed "yesterday".
+    previous_rate = find_previous_rate({"history": history}, rate.date)
     change = calculate_change(rate.rate_per_gram, previous_rate)
 
-    history = upsert_history(
-        (existing or {}).get("history", []), rate.date, rate.rate_per_gram
-    )
     updated_at = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
     try:
@@ -94,9 +107,10 @@ def main() -> int:
         return 1
 
     logger.info(
-        "Published Hyderabad 22K rate: Rs.%s/g (date=%s)",
+        "Published Hyderabad 22K rate: Rs.%s/g (date=%s); history now has %d day(s)",
         f"{rate.rate_per_gram:,.2f}",
         rate.date,
+        len(history),
     )
 
     # Keep the local SQLite history in sync too (best-effort). On GitHub
@@ -104,13 +118,7 @@ def main() -> int:
     # JSON file above is the durable, committed record for the pipeline.
     try:
         db = GoldRateDatabase()
-        db.insert_rate(
-            city=rate.city,
-            purity=rate.purity,
-            rate_per_gram=rate.rate_per_gram,
-            date=rate.date,
-            source=rate.source,
-        )
+        db.insert_many_rates(list(history_rows) + [rate])
     except Exception as exc:  # noqa: BLE001
         logger.warning("Local database update skipped: %s", exc)
 
@@ -122,6 +130,7 @@ def main() -> int:
         date=rate.date,
         change=change,
         updated_time=datetime.now().strftime("%H:%M"),
+        previous_rate=previous_rate,
     )
     try:
         send_telegram_message(message)

@@ -374,6 +374,37 @@ main {
   text-align: center;
 }
 
+/* --- Recent rates list --- */
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  min-height: 44px;
+}
+
+.recent-row + .recent-row {
+  border-top: 1px solid var(--border);
+}
+
+.recent-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.recent-value {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
 /* --- Source / footer --- */
 
 .source-card p {

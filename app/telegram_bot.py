@@ -39,7 +39,12 @@ def build_message(
     date: str,
     change: Optional[RateChange],
     updated_time: str,
+    previous_rate: Optional[float] = None,
 ) -> str:
+    """previous_rate is optional and additive: when given (the immediately
+    preceding date's actual rate from history, not "yesterday" assumed),
+    an extra "Previous: ₹X / gram" line is included so the comparison in
+    `change` has a concrete rate to reference, not just a delta."""
     rate_8g = rate_per_gram * 8
     rate_10g = rate_per_gram * 10
 
@@ -47,6 +52,10 @@ def build_message(
         change_line = change.formatted()
     else:
         change_line = "Not available"
+
+    previous_line = (
+        f"Previous:\n₹{format_inr(previous_rate)} / gram\n" if previous_rate is not None else ""
+    )
 
     return (
         "🪙 HYDERABAD GOLD RATE\n"
@@ -56,6 +65,7 @@ def build_message(
         f"10 grams: ₹{format_inr(rate_10g)}\n"
         "Change:\n"
         f"{change_line}\n"
+        f"{previous_line}"
         f"📅 {_display_date(date)}\n"
         f"🕘 Updated: {updated_time}\n"
         "Source: Goodreturns\n"

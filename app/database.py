@@ -13,7 +13,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -128,3 +128,25 @@ class GoldRateDatabase:
                 (city, purity, n),
             ).fetchall()
         return [StoredRate(**dict(row)) for row in rows]
+
+    def insert_many_rates(self, rates: Iterable[object]) -> int:
+        """Upserts a batch of rate records (e.g. Goodreturns' "Last 10 Days"
+        history, each an object with .city/.purity/.rate_per_gram/.date/
+        .source attributes -- a GoldRate works directly).
+
+        Reuses insert_rate's upsert-by-(date, city, purity) for each record,
+        so this can never create duplicates and never deletes an existing
+        row -- a batch with fewer rows than a previous run simply leaves
+        the rows it doesn't mention untouched. Returns the number of rows
+        upserted."""
+        count = 0
+        for rate in rates:
+            self.insert_rate(
+                city=rate.city,
+                purity=rate.purity,
+                rate_per_gram=rate.rate_per_gram,
+                date=rate.date,
+                source=rate.source,
+            )
+            count += 1
+        return count

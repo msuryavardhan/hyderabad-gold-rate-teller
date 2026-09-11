@@ -32,6 +32,20 @@ class TestBuildMessage(unittest.TestCase):
             updated_time="09:00",
         )
         self.assertIn("Not available", message)
+        self.assertNotIn("Previous:", message)
+
+    def test_message_includes_previous_rate_when_given(self):
+        change = calculate_change(today_rate=14015, previous_rate=14255)
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=change,
+            updated_time="09:00",
+            previous_rate=14255,
+        )
+        self.assertIn("-₹240 / gram (-1.68%)", message)
+        self.assertIn("Previous:", message)
+        self.assertIn("₹14,255 / gram", message)
 
 
 if __name__ == "__main__":

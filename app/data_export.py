@@ -22,10 +22,12 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 from app.calculator import RateChange
 from app.scraper import GoldRate
+
+HistoryRecord = Union[GoldRate, dict]
 
 logger = logging.getLogger(__name__)
 
@@ -80,21 +82,59 @@ def find_previous_rate(existing: Optional[dict], today_date: str) -> Optional[fl
     return latest.get("rate_per_gram")
 
 
+def merge_history_records(
+    history: list[dict],
+    records: Iterable[HistoryRecord],
+    max_entries: int = MAX_HISTORY_ENTRIES,
+) -> list[dict]:
+    """Merges new records (each a GoldRate or a {"date", "rate_per_gram"}
+    dict) into an existing history list, keyed by date.
+
+    This is the one place that ever changes the history array, and it only
+    ever adds or updates entries by date -- it never removes a date that
+    isn't being replaced, so a day where Goodreturns' "Last 10 Days" table
+    happens to show fewer rows than usual can never delete history we
+    already collected on an earlier run. Records are applied in the order
+    given, so if two records share a date (e.g. the "current rate" card and
+    the historical table's own row for today), the later one in `records`
+    wins -- callers should pass the historical rows first and the
+    authoritative "current" rate last.
+
+    Invalid entries (non-positive rate, malformed date) are silently
+    skipped rather than raised, since this is a merge of already-scraped
+    data where a single bad row must not block publishing everything else;
+    build_json_payload still guards the final "current" rate strictly.
+    """
+    by_date: dict[str, float] = {}
+    for entry in history or []:
+        if isinstance(entry, dict) and _DATE_RE.match(entry.get("date") or ""):
+            rate = entry.get("rate_per_gram")
+            if isinstance(rate, (int, float)) and rate > 0:
+                by_date[entry["date"]] = round(rate, 2)
+
+    for record in records:
+        date = record.date if isinstance(record, GoldRate) else record.get("date")
+        rate = record.rate_per_gram if isinstance(record, GoldRate) else record.get("rate_per_gram")
+        if not date or not _DATE_RE.match(date):
+            logger.warning("Skipping history record with invalid date: %r", date)
+            continue
+        if not isinstance(rate, (int, float)) or rate <= 0:
+            logger.warning("Skipping history record for %s with invalid rate: %r", date, rate)
+            continue
+        by_date[date] = round(rate, 2)
+
+    merged = [{"date": date, "rate_per_gram": rate} for date, rate in by_date.items()]
+    merged.sort(key=lambda entry: entry["date"])
+    return merged[-max_entries:]
+
+
 def upsert_history(
     history: list[dict], date: str, rate_per_gram: float, max_entries: int = MAX_HISTORY_ENTRIES
 ) -> list[dict]:
-    """Adds today's entry to the history list, replacing any existing entry
-    for the same date (so re-running the pipeline twice in one day updates
-    that day's value instead of creating a duplicate). Keeps the list
-    sorted ascending by date and trimmed to the most recent max_entries."""
-    filtered = [
-        entry
-        for entry in (history or [])
-        if isinstance(entry, dict) and entry.get("date") != date
-    ]
-    filtered.append({"date": date, "rate_per_gram": round(rate_per_gram, 2)})
-    filtered.sort(key=lambda entry: entry["date"])
-    return filtered[-max_entries:]
+    """Adds a single day's entry to the history list, replacing any existing
+    entry for the same date. A thin convenience wrapper around
+    merge_history_records for the common one-record case."""
+    return merge_history_records(history, [{"date": date, "rate_per_gram": rate_per_gram}], max_entries)
 
 
 def build_json_payload(

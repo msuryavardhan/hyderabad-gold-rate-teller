@@ -53,13 +53,16 @@ telegram code, for two different jobs:
 - **`run.py`** — the original CLI tool (Phase 1). Prints the rate, stores it
   in local SQLite, sends Telegram. Unchanged by Phase 2.
 - **`scripts/update_gold_rate_data.py`** — the pipeline used by GitHub
-  Actions. Fetches the rate, reads the *previously committed*
-  `web/data/gold_rates.json` to compute change and extend history (because
+  Actions. Fetches the current rate **and** Goodreturns' own "Gold Rate in
+  Hyderabad for Last 10 Days (1 gram)" table in the same request, merges
+  both into the *previously committed* `web/data/gold_rates.json` (because
   GitHub Actions checks out a fresh copy of the repo every run — nothing
   persists on the runner between runs, so the committed JSON file itself is
-  the durable historical record for the public site), writes the updated
-  JSON, and sends Telegram. It also updates local SQLite for parity, but
-  that's incidental on a CI runner.
+  the durable historical record for the public site), computes change
+  against the most recent *actually available* previous date (never an
+  assumed "yesterday"), writes the updated JSON, and sends Telegram. It
+  also updates local SQLite for parity, but that's incidental on a CI
+  runner.
 
 ```
 hyderabad-gold-rate-teller/
@@ -286,10 +289,13 @@ Each run:
 1. Checks out the repo, sets up Python 3.13, installs dependencies.
 2. Runs the existing test suite.
 3. Runs `scripts/update_gold_rate_data.py`, which fetches Goodreturns,
-   validates the 22K rate, and writes `web/data/gold_rates.json`.
+   validates today's 22K rate **and** its "Last 10 Days" historical table,
+   merges both into the existing history, and writes
+   `web/data/gold_rates.json`.
 4. **If step 3 fails for any reason** (no internet, Goodreturns down, HTML
-   structure changed, rate looks invalid) **the job stops there** — no
-   commit, no push, no fake data, and the site keeps showing the last
+   structure changed, today's rate or the historical table can't be
+   confidently parsed) **the job stops there** — no commit, no push, no
+   fake data or fake history, and the site keeps showing the last
    successfully published rate.
 5. If step 3 succeeds, commits and pushes `web/data/gold_rates.json` only
    if it actually changed.
@@ -374,9 +380,13 @@ GitHub Actions pipeline above exists as the primary, always-on path.
   date — so "Updated"/"Last fetched" reflects this pipeline's own fetch
   time.
 - This is **not** an official/IBJA/government gold rate.
-- The public history in `web/data/gold_rates.json` starts from whenever
-  this pipeline first ran successfully — no earlier days are backfilled or
-  fabricated.
+- On its very first successful run, the pipeline also reads Goodreturns'
+  own "Gold Rate in Hyderabad for Last 10 Days (1 gram)" table, so
+  `web/data/gold_rates.json` typically starts with up to ~10 real days of
+  history immediately, not just one. From then on, each daily run extends
+  it further and never deletes an earlier date — but nothing before
+  whatever Goodreturns' own 10-day table showed on first run is backfilled
+  or fabricated.
 - GitHub Actions' free-tier scheduled workflows can occasionally run a few
   minutes late during high platform load; this is a GitHub-side behaviour,
   not something this project controls.

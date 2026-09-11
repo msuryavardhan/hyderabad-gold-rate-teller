@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -9,6 +10,7 @@ from app.data_export import (
     build_json_payload,
     find_previous_rate,
     load_existing_json,
+    merge_history_records,
     upsert_history,
     write_json_atomic,
 )
@@ -192,6 +194,142 @@ class TestWriteJsonAtomic(unittest.TestCase):
             write_json_atomic({"version": 1}, path)
             write_json_atomic({"version": 2}, path)
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["version"], 2)
+
+
+class TestMergeHistoryRecords(unittest.TestCase):
+    def test_merges_goldrate_objects(self):
+        records = [
+            make_rate(rate_per_gram=14255.0, date="2026-09-10"),
+            make_rate(rate_per_gram=14015.0, date="2026-09-11"),
+        ]
+        result = merge_history_records([], records)
+        self.assertEqual(
+            result,
+            [
+                {"date": "2026-09-10", "rate_per_gram": 14255.0},
+                {"date": "2026-09-11", "rate_per_gram": 14015.0},
+            ],
+        )
+
+    def test_duplicate_dates_collapse_to_one_entry(self):
+        existing = [{"date": "2026-09-11", "rate_per_gram": 14000.0}]
+        records = [
+            make_rate(rate_per_gram=14010.0, date="2026-09-11"),
+            make_rate(rate_per_gram=14015.0, date="2026-09-11"),  # same date again
+        ]
+        result = merge_history_records(existing, records)
+        self.assertEqual(len(result), 1)
+        # Later record in the list wins -- callers rely on this to let the
+        # authoritative "current" rate override a same-day historical row.
+        self.assertEqual(result[0]["rate_per_gram"], 14015.0)
+
+    def test_sorts_chronologically_regardless_of_input_order(self):
+        records = [
+            make_rate(rate_per_gram=14015.0, date="2026-09-11"),
+            make_rate(rate_per_gram=13935.0, date="2026-09-02"),
+            make_rate(rate_per_gram=14360.0, date="2026-09-04"),
+        ]
+        result = merge_history_records([], records)
+        self.assertEqual([r["date"] for r in result], ["2026-09-02", "2026-09-04", "2026-09-11"])
+
+    def test_never_deletes_existing_dates_not_mentioned_again(self):
+        # Simulates Goodreturns temporarily showing fewer rows than a
+        # previous run already collected -- old dates must survive.
+        existing = [
+            {"date": "2026-08-01", "rate_per_gram": 13500.0},
+            {"date": "2026-08-02", "rate_per_gram": 13520.0},
+        ]
+        new_records = [make_rate(rate_per_gram=14015.0, date="2026-09-11")]
+        result = merge_history_records(existing, new_records)
+        dates = [r["date"] for r in result]
+        self.assertIn("2026-08-01", dates)
+        self.assertIn("2026-08-02", dates)
+        self.assertIn("2026-09-11", dates)
+
+    def test_invalid_records_are_skipped_not_fabricated(self):
+        records = [
+            make_rate(rate_per_gram=0, date="2026-09-11"),  # non-positive
+            make_rate(rate_per_gram=14015.0, date="not-a-date"),  # bad date
+        ]
+        result = merge_history_records([], records)
+        self.assertEqual(result, [])
+
+    def test_accepts_plain_dicts_too(self):
+        result = merge_history_records([], [{"date": "2026-09-11", "rate_per_gram": 14015.0}])
+        self.assertEqual(result, [{"date": "2026-09-11", "rate_per_gram": 14015.0}])
+
+
+class TestChangeAgainstPreviousAvailableDate(unittest.TestCase):
+    """The user's worked example: today ₹14,015 vs the immediately
+    preceding *available* date (not an assumed "yesterday")."""
+
+    def test_matches_worked_example(self):
+        history = merge_history_records(
+            [],
+            [
+                make_rate(rate_per_gram=14255.0, date="2026-09-10"),
+                make_rate(rate_per_gram=14015.0, date="2026-09-11"),
+            ],
+        )
+        previous = find_previous_rate({"history": history}, "2026-09-11")
+        self.assertEqual(previous, 14255.0)
+        change = calculate_change(14015.0, previous)
+        self.assertEqual(change.absolute, -240)
+        self.assertAlmostEqual(change.percentage, -1.68, places=2)
+
+    def test_skips_gap_to_find_previous_available_date(self):
+        # No entry for "yesterday" (2026-09-10) -- must not assume it was
+        # equal to today or invent a value; must fall back to the actual
+        # most recent earlier date.
+        history = merge_history_records(
+            [],
+            [
+                make_rate(rate_per_gram=13935.0, date="2026-09-02"),
+                make_rate(rate_per_gram=14015.0, date="2026-09-11"),
+            ],
+        )
+        previous = find_previous_rate({"history": history}, "2026-09-11")
+        self.assertEqual(previous, 13935.0)
+
+
+class TestDashboardRangeData(unittest.TestCase):
+    """The exported history array must be directly usable for the
+    dashboard's 7D/30D slicing: sorted ascending, real dates only, and
+    simply sliceable from the end -- no fabricated padding when fewer
+    records exist than the requested window."""
+
+    def _history_for(self, n_days):
+        base = date(2026, 8, 1)
+        records = [
+            make_rate(rate_per_gram=14000.0 + i, date=(base + timedelta(days=i)).isoformat())
+            for i in range(n_days)
+        ]
+        return merge_history_records([], records)
+
+    def test_7_day_window_with_full_history(self):
+        history = self._history_for(30)
+        last_7 = history[-7:]
+        self.assertEqual(len(last_7), 7)
+        self.assertEqual(last_7[-1]["date"], history[-1]["date"])
+        expected_first = (date(2026, 8, 1) + timedelta(days=29 - 6)).isoformat()
+        self.assertEqual(last_7[0]["date"], expected_first)
+
+    def test_30_day_window_with_full_history(self):
+        history = self._history_for(45)
+        last_30 = history[-30:]
+        self.assertEqual(len(last_30), 30)
+        self.assertEqual(last_30[-1]["date"], history[-1]["date"])
+
+    def test_7_day_window_with_fewer_records_shows_only_real_ones(self):
+        history = self._history_for(3)
+        last_7 = history[-7:]
+        # Must not be padded out to 7 -- only the 3 real days exist.
+        self.assertEqual(len(last_7), 3)
+
+    def test_30_day_window_with_fewer_records_shows_only_real_ones(self):
+        history = self._history_for(10)
+        last_30 = history[-30:]
+        self.assertEqual(len(last_30), 10)
 
 
 if __name__ == "__main__":

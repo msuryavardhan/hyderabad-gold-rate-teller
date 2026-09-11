@@ -42,6 +42,8 @@
     els.chartWrap = document.getElementById("chart-wrap");
     els.historyNote = document.getElementById("history-note");
     els.rangeButtons = Array.prototype.slice.call(document.querySelectorAll(".range-btn"));
+
+    els.recentList = document.getElementById("recent-list");
   }
 
   function showState(name) {
@@ -124,6 +126,55 @@
     pillEl.textContent =
       arrow + " " + sign + "₹" + formatInr(Math.abs(absolute)) + " / g (" + sign + Math.abs(percentage).toFixed(2) + "%)";
     els.changeLine.appendChild(pillEl);
+  }
+
+  function daysBetween(isoDateA, isoDateB) {
+    var a = new Date(isoDateA + "T00:00:00Z");
+    var b = new Date(isoDateB + "T00:00:00Z");
+    return Math.round((a.getTime() - b.getTime()) / 86400000);
+  }
+
+  function relativeLabel(entryDate, todayDate) {
+    var diff = daysBetween(todayDate, entryDate);
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    if (diff > 1) return diff + " days ago";
+    // A future-dated entry shouldn't normally occur, but fall back to the
+    // actual date rather than asserting a relative label that isn't true.
+    return new Date(entryDate + "T00:00:00Z").toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  }
+
+  function renderRecentRates(payload) {
+    var history = Array.isArray(payload.history) ? payload.history.slice() : [];
+    els.recentList.innerHTML = "";
+
+    if (!history.length) return;
+
+    var sorted = history.slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; // newest first
+    });
+    var recent = sorted.slice(0, 4);
+
+    recent.forEach(function (entry) {
+      var li = document.createElement("li");
+      li.className = "recent-row";
+
+      var label = document.createElement("span");
+      label.className = "recent-label";
+      label.textContent = relativeLabel(entry.date, payload.date);
+
+      var value = document.createElement("span");
+      value.className = "recent-value";
+      value.textContent = "₹" + formatInr(entry.rate_per_gram);
+
+      li.appendChild(label);
+      li.appendChild(value);
+      els.recentList.appendChild(li);
+    });
   }
 
   function historyForRange(history, days) {
@@ -279,6 +330,7 @@
         state.payload = payload;
         renderCurrent(payload);
         renderChart();
+        renderRecentRates(payload);
         showState("content");
       })
       .catch(function (err) {
