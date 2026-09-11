@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Database (contains historical rate data, not needed in version control)
+gold_rates.db
+*.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Downloaded/inspection artifacts
+tests/fixtures/*.html.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
