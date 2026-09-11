@@ -3,8 +3,9 @@
  *
  * Plain vanilla JS. No frameworks, no chart library, no CDN dependency:
  * the history chart is a small hand-drawn SVG line, which keeps the page
- * fast-loading and avoids pulling in a dependency just for a single line
- * chart.
+ * fast-loading and avoids pulling in a dependency just for a line chart.
+ * The same chart/tooltip logic is reused for both the 22K and 24K charts
+ * via a small "chart context" object (see charts.k22 / charts.k24 below).
  *
  * All gold-rate data comes from ./data/gold_rates.json, produced by the
  * Python pipeline (see app/data_export.py and scripts/update_gold_rate_data.py).
@@ -23,6 +24,14 @@
 
   var els = {};
 
+  // Two independent chart contexts sharing the same rendering/tooltip
+  // logic. Each tracks its own currently-plotted points and open-tooltip
+  // state, so hovering one chart never affects the other.
+  var charts = {
+    k22: { key: "k22", label: "22K Gold Rate", points: [], activeIndex: null },
+    k24: { key: "k24", label: "24K Gold Rate", points: [], activeIndex: null },
+  };
+
   function cacheElements() {
     els.loading = document.getElementById("loading-state");
     els.error = document.getElementById("error-state");
@@ -38,16 +47,29 @@
     els.rateUpdated = document.getElementById("rate-updated");
     els.sourceLink = document.getElementById("source-link");
 
-    els.chart = document.getElementById("chart");
-    els.chartWrap = document.getElementById("chart-wrap");
-    els.historyNote = document.getElementById("history-note");
+    els.rate24kValueWrap = document.getElementById("rate-24k-value-wrap");
+    els.rupee24k = document.getElementById("rupee-24k");
+    els.rate24kPerGram = document.getElementById("rate-24k-per-gram");
+    els.rate24k8g = document.getElementById("rate-24k-8g");
+    els.rate24k10g = document.getElementById("rate-24k-10g");
+    els.change24kLine = document.getElementById("change-24k-line");
+
     els.rangeButtons = Array.prototype.slice.call(document.querySelectorAll(".range-btn"));
+    els.recentTableBody = document.getElementById("recent-table-body");
 
-    els.recentList = document.getElementById("recent-list");
+    charts.k22.svg = document.getElementById("chart");
+    charts.k22.wrap = document.getElementById("chart-wrap");
+    charts.k22.historyNote = document.getElementById("history-note");
+    charts.k22.tooltip = document.getElementById("chart-tooltip");
+    charts.k22.tooltipDate = document.getElementById("tooltip-date");
+    charts.k22.tooltipValue = document.getElementById("tooltip-value");
 
-    els.tooltip = document.getElementById("chart-tooltip");
-    els.tooltipDate = document.getElementById("tooltip-date");
-    els.tooltipValue = document.getElementById("tooltip-value");
+    charts.k24.svg = document.getElementById("chart-24k");
+    charts.k24.wrap = document.getElementById("chart-wrap-24k");
+    charts.k24.historyNote = document.getElementById("history-note-24k");
+    charts.k24.tooltip = document.getElementById("chart-tooltip-24k");
+    charts.k24.tooltipDate = document.getElementById("tooltip-24k-date");
+    charts.k24.tooltipValue = document.getElementById("tooltip-24k-value");
   }
 
   function showState(name) {
@@ -109,6 +131,29 @@
     return datePart + ", " + timePart;
   }
 
+  function renderChangeInto(targetEl, change) {
+    targetEl.innerHTML = "";
+    var absolute = change && change.absolute;
+    var percentage = change && change.percentage;
+
+    if (absolute === null || absolute === undefined || percentage === null || percentage === undefined) {
+      var pill = document.createElement("span");
+      pill.className = "change-pill neutral";
+      pill.textContent = "Change: Not available";
+      targetEl.appendChild(pill);
+      return;
+    }
+
+    var isUp = absolute >= 0;
+    var sign = isUp ? "+" : "-";
+    var arrow = isUp ? "▲" : "▼";
+    var pillEl = document.createElement("span");
+    pillEl.className = "change-pill " + (isUp ? "up" : "down");
+    pillEl.textContent =
+      arrow + " " + sign + "₹" + formatInr(Math.abs(absolute)) + " / g (" + sign + Math.abs(percentage).toFixed(2) + "%)";
+    targetEl.appendChild(pillEl);
+  }
+
   function renderCurrent(payload) {
     var current = payload.current || {};
     els.ratePerGram.textContent = formatInr(current.rate_per_gram);
@@ -120,30 +165,29 @@
       els.sourceLink.href = payload.source_url;
     }
 
-    renderChange(payload.change);
+    renderChangeInto(els.changeLine, payload.change);
   }
 
-  function renderChange(change) {
-    els.changeLine.innerHTML = "";
-    var absolute = change && change.absolute;
-    var percentage = change && change.percentage;
+  function renderCurrent24k(payload) {
+    var gold24k = payload.gold_24k || {};
+    var current = gold24k.current;
 
-    if (absolute === null || absolute === undefined || percentage === null || percentage === undefined) {
-      var pill = document.createElement("span");
-      pill.className = "change-pill neutral";
-      pill.textContent = "Change: Not available";
-      els.changeLine.appendChild(pill);
+    if (!current) {
+      els.rate24kValueWrap.classList.add("unavailable");
+      els.rupee24k.hidden = true;
+      els.rate24kPerGram.textContent = "Not available";
+      els.rate24k8g.textContent = "--";
+      els.rate24k10g.textContent = "--";
+      renderChangeInto(els.change24kLine, null);
       return;
     }
 
-    var isUp = absolute >= 0;
-    var sign = isUp ? "+" : "-";
-    var arrow = isUp ? "▲" : "▼";
-    var pillEl = document.createElement("span");
-    pillEl.className = "change-pill " + (isUp ? "up" : "down");
-    pillEl.textContent =
-      arrow + " " + sign + "₹" + formatInr(Math.abs(absolute)) + " / g (" + sign + Math.abs(percentage).toFixed(2) + "%)";
-    els.changeLine.appendChild(pillEl);
+    els.rate24kValueWrap.classList.remove("unavailable");
+    els.rupee24k.hidden = false;
+    els.rate24kPerGram.textContent = formatInr(current.rate_per_gram);
+    els.rate24k8g.textContent = "₹" + formatInr(current.rate_8g);
+    els.rate24k10g.textContent = "₹" + formatInr(current.rate_10g);
+    renderChangeInto(els.change24kLine, gold24k.change);
   }
 
   function daysBetween(isoDateA, isoDateB) {
@@ -166,32 +210,55 @@
     });
   }
 
+  // Looks up the rate for an exact date in a history array, or null if
+  // that purity has no record for that date -- never estimated/interpolated.
+  function findRateForDate(history, isoDate) {
+    if (!Array.isArray(history)) return null;
+    for (var i = 0; i < history.length; i++) {
+      if (history[i] && history[i].date === isoDate) return history[i].rate_per_gram;
+    }
+    return null;
+  }
+
   function renderRecentRates(payload) {
-    var history = Array.isArray(payload.history) ? payload.history.slice() : [];
-    els.recentList.innerHTML = "";
+    var history22k = Array.isArray(payload.history) ? payload.history.slice() : [];
+    var history24k = (payload.gold_24k && Array.isArray(payload.gold_24k.history)) ? payload.gold_24k.history : [];
 
-    if (!history.length) return;
+    els.recentTableBody.innerHTML = "";
+    if (!history22k.length) return;
 
-    var sorted = history.slice().sort(function (a, b) {
+    // 22K is the required, always-present purity, so its dates form the
+    // backbone of "recent" rows; 24K is looked up per date and marked
+    // "Not available" rather than estimated if that date has no 24K entry.
+    var sorted22k = history22k.slice().sort(function (a, b) {
       return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; // newest first
     });
-    var recent = sorted.slice(0, 4);
+    var recent = sorted22k.slice(0, 4);
 
     recent.forEach(function (entry) {
-      var li = document.createElement("li");
-      li.className = "recent-row";
+      var tr = document.createElement("tr");
 
-      var label = document.createElement("span");
-      label.className = "recent-label";
-      label.textContent = relativeLabel(entry.date, payload.date);
+      var dateCell = document.createElement("td");
+      dateCell.textContent = relativeLabel(entry.date, payload.date);
+      tr.appendChild(dateCell);
 
-      var value = document.createElement("span");
-      value.className = "recent-value";
-      value.textContent = "₹" + formatInr(entry.rate_per_gram);
+      var cell22k = document.createElement("td");
+      cell22k.className = "value-22k";
+      cell22k.textContent = "₹" + formatInr(entry.rate_per_gram);
+      tr.appendChild(cell22k);
 
-      li.appendChild(label);
-      li.appendChild(value);
-      els.recentList.appendChild(li);
+      var rate24k = findRateForDate(history24k, entry.date);
+      var cell24k = document.createElement("td");
+      if (rate24k === null || rate24k === undefined) {
+        cell24k.className = "value-unavailable";
+        cell24k.textContent = "Not available";
+      } else {
+        cell24k.className = "value-24k";
+        cell24k.textContent = "₹" + formatInr(rate24k);
+      }
+      tr.appendChild(cell24k);
+
+      els.recentTableBody.appendChild(tr);
     });
   }
 
@@ -204,38 +271,45 @@
   }
 
   // --- Chart tooltip (works for both mouse hover and touch tap) ---
+  // All functions below take a chart context (charts.k22 or charts.k24)
+  // so the exact same logic drives both charts independently.
 
-  function hideTooltip() {
-    if (!els.tooltip) return;
-    els.tooltip.hidden = true;
-    state.activeIndex = null;
-    var activeDot = els.chart.querySelector(".chart-active-dot");
+  function hideTooltip(ctx) {
+    if (!ctx.tooltip) return;
+    ctx.tooltip.hidden = true;
+    ctx.activeIndex = null;
+    var activeDot = ctx.svg.querySelector(".chart-active-dot");
     if (activeDot) activeDot.setAttribute("r", 0);
   }
 
-  function highlightPoint(index) {
-    var activeDot = els.chart.querySelector(".chart-active-dot");
-    var hitEl = els.chart.querySelector('.chart-hit[data-point-index="' + index + '"]');
+  function hideAllTooltips() {
+    hideTooltip(charts.k22);
+    hideTooltip(charts.k24);
+  }
+
+  function highlightPoint(ctx, index) {
+    var activeDot = ctx.svg.querySelector(".chart-active-dot");
+    var hitEl = ctx.svg.querySelector('.chart-hit[data-point-index="' + index + '"]');
     if (!activeDot || !hitEl) return;
     activeDot.setAttribute("cx", hitEl.getAttribute("cx"));
     activeDot.setAttribute("cy", hitEl.getAttribute("cy"));
     activeDot.setAttribute("r", 5);
   }
 
-  function positionTooltip(hitEl) {
-    var wrapRect = els.chartWrap.getBoundingClientRect();
+  function positionTooltip(ctx, hitEl) {
+    var wrapRect = ctx.wrap.getBoundingClientRect();
     var hitRect = hitEl.getBoundingClientRect();
     var centerX = hitRect.left + hitRect.width / 2 - wrapRect.left;
     var topY = hitRect.top - wrapRect.top;
 
-    els.tooltip.style.left = centerX + "px";
-    els.tooltip.style.top = topY + "px";
-    els.tooltip.style.transform = "translate(-50%, calc(-100% - 12px))";
+    ctx.tooltip.style.left = centerX + "px";
+    ctx.tooltip.style.top = topY + "px";
+    ctx.tooltip.style.transform = "translate(-50%, calc(-100% - 12px))";
 
     // Clamp horizontally so the tooltip is never clipped outside the
     // chart card, e.g. for the first/last point on a narrow phone screen.
-    var tooltipRect = els.tooltip.getBoundingClientRect();
-    var cardRect = els.chartWrap.closest(".card").getBoundingClientRect();
+    var tooltipRect = ctx.tooltip.getBoundingClientRect();
+    var cardRect = ctx.wrap.closest(".card").getBoundingClientRect();
     var shift = 0;
     if (tooltipRect.right > cardRect.right - 4) {
       shift = cardRect.right - 4 - tooltipRect.right;
@@ -243,33 +317,30 @@
       shift = cardRect.left + 4 - tooltipRect.left;
     }
     if (shift !== 0) {
-      els.tooltip.style.transform = "translate(calc(-50% + " + shift.toFixed(1) + "px), calc(-100% - 12px))";
+      ctx.tooltip.style.transform = "translate(calc(-50% + " + shift.toFixed(1) + "px), calc(-100% - 12px))";
     }
   }
 
-  function showTooltipForIndex(index) {
-    var points = state.chartPoints;
-    if (!points || !points[index] || !els.tooltip) return;
+  function showTooltipForIndex(ctx, index) {
+    var points = ctx.points;
+    if (!points || !points[index] || !ctx.tooltip) return;
 
     var point = points[index];
-    state.activeIndex = index;
-    els.tooltipDate.textContent = formatTooltipDate(point.date);
-    els.tooltipValue.textContent = "₹" + formatInr(point.rate_per_gram) + " / gram";
-    els.tooltip.hidden = false;
+    ctx.activeIndex = index;
+    ctx.tooltipDate.textContent = formatTooltipDate(point.date);
+    ctx.tooltipValue.textContent = "₹" + formatInr(point.rate_per_gram) + " / gram";
+    ctx.tooltip.hidden = false;
 
-    var hitEl = els.chart.querySelector('.chart-hit[data-point-index="' + index + '"]');
-    if (hitEl) positionTooltip(hitEl);
-    highlightPoint(index);
+    var hitEl = ctx.svg.querySelector('.chart-hit[data-point-index="' + index + '"]');
+    if (hitEl) positionTooltip(ctx, hitEl);
+    highlightPoint(ctx, index);
   }
 
-  function renderChart() {
-    var payload = state.payload;
-    if (!payload) return;
-
-    hideTooltip();
-    var points = historyForRange(payload.history, state.range);
-    state.chartPoints = points;
-    var svg = els.chart;
+  function renderChartInto(ctx, historyData) {
+    hideTooltip(ctx);
+    var points = historyForRange(historyData, state.range);
+    ctx.points = points;
+    var svg = ctx.svg;
 
     // Clear everything except the accessible <title>, then rebuild.
     var title = svg.querySelector("title");
@@ -277,13 +348,13 @@
     if (title) svg.appendChild(title);
 
     if (points.length < 2) {
-      els.chartWrap.hidden = true;
-      els.historyNote.hidden = false;
+      ctx.wrap.hidden = true;
+      ctx.historyNote.hidden = false;
       return;
     }
 
-    els.chartWrap.hidden = false;
-    els.historyNote.hidden = true;
+    ctx.wrap.hidden = false;
+    ctx.historyNote.hidden = true;
 
     var width = 320;
     var height = 140;
@@ -390,35 +461,42 @@
       hit.setAttribute("role", "button");
       hit.setAttribute(
         "aria-label",
-        formatTooltipDate(p.date) + ", 22K gold rate ₹" + formatInr(p.rate_per_gram) + " per gram"
+        formatTooltipDate(p.date) + ", " + ctx.label + " ₹" + formatInr(p.rate_per_gram) + " per gram"
       );
 
       hit.addEventListener("mouseenter", function () {
-        showTooltipForIndex(i);
+        showTooltipForIndex(ctx, i);
       });
       hit.addEventListener("mouseleave", function () {
-        hideTooltip();
+        hideTooltip(ctx);
       });
       hit.addEventListener("focus", function () {
-        showTooltipForIndex(i);
+        showTooltipForIndex(ctx, i);
       });
       hit.addEventListener("blur", function () {
-        hideTooltip();
+        hideTooltip(ctx);
       });
       // `click` fires for both a mouse click and a touch tap (without
       // needing touchstart/touchmove handlers that would risk blocking
       // normal page scrolling), so this alone covers mobile tap-to-show.
       hit.addEventListener("click", function (e) {
         e.stopPropagation();
-        if (state.activeIndex === i && !els.tooltip.hidden) {
-          hideTooltip();
+        if (ctx.activeIndex === i && !ctx.tooltip.hidden) {
+          hideTooltip(ctx);
         } else {
-          showTooltipForIndex(i);
+          showTooltipForIndex(ctx, i);
         }
       });
 
       svg.appendChild(hit);
     });
+  }
+
+  function renderCharts() {
+    var payload = state.payload;
+    if (!payload) return;
+    renderChartInto(charts.k22, payload.history);
+    renderChartInto(charts.k24, (payload.gold_24k && payload.gold_24k.history) || []);
   }
 
   function setRange(days) {
@@ -427,7 +505,7 @@
       var active = Number(btn.dataset.range) === days;
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
-    renderChart();
+    renderCharts();
   }
 
   function attachRangeButtons() {
@@ -457,7 +535,8 @@
         }
         state.payload = payload;
         renderCurrent(payload);
-        renderChart();
+        renderCurrent24k(payload);
+        renderCharts();
         renderRecentRates(payload);
         showState("content");
       })
@@ -472,15 +551,17 @@
     attachRangeButtons();
     els.retryButton.addEventListener("click", load);
 
-    // Dismiss the tooltip on a tap/click anywhere outside the chart, and
-    // on resize (its position is computed from live element rects, which
-    // a resize would make stale until the next hover/tap).
+    // Dismiss any open tooltip on a tap/click outside both charts, and on
+    // resize (a tooltip's position is computed from live element rects,
+    // which a resize would make stale until the next hover/tap).
     document.addEventListener("click", function (e) {
-      if (els.chartWrap && !els.chartWrap.contains(e.target)) {
-        hideTooltip();
+      var insideK22 = charts.k22.wrap && charts.k22.wrap.contains(e.target);
+      var insideK24 = charts.k24.wrap && charts.k24.wrap.contains(e.target);
+      if (!insideK22 && !insideK24) {
+        hideAllTooltips();
       }
     });
-    window.addEventListener("resize", hideTooltip);
+    window.addEventListener("resize", hideAllTooltips);
 
     load();
   });

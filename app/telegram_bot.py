@@ -34,28 +34,57 @@ def _display_date(iso_date: str) -> str:
         return iso_date
 
 
+def _rate_block(rate_per_gram: float, change: Optional[RateChange], previous_rate: Optional[float]) -> tuple:
+    """Shared piece of the message: rate / 8g / 10g / change / previous
+    lines for one purity. Returns (rate_8g, rate_10g, change_line,
+    previous_line) so build_message can assemble the 22K block exactly as
+    before and, optionally, an equivalent 24K block."""
+    rate_8g = rate_per_gram * 8
+    rate_10g = rate_per_gram * 10
+    change_line = change.formatted() if change is not None else "Not available"
+    previous_line = (
+        f"Previous:\n₹{format_inr(previous_rate)} / gram\n" if previous_rate is not None else ""
+    )
+    return rate_8g, rate_10g, change_line, previous_line
+
+
 def build_message(
     rate_per_gram: float,
     date: str,
     change: Optional[RateChange],
     updated_time: str,
     previous_rate: Optional[float] = None,
+    rate_24k_per_gram: Optional[float] = None,
+    change_24k: Optional[RateChange] = None,
+    previous_rate_24k: Optional[float] = None,
 ) -> str:
     """previous_rate is optional and additive: when given (the immediately
     preceding date's actual rate from history, not "yesterday" assumed),
     an extra "Previous: ₹X / gram" line is included so the comparison in
-    `change` has a concrete rate to reference, not just a delta."""
-    rate_8g = rate_per_gram * 8
-    rate_10g = rate_per_gram * 10
+    `change` has a concrete rate to reference, not just a delta.
 
-    if change is not None:
-        change_line = change.formatted()
-    else:
-        change_line = "Not available"
+    rate_24k_per_gram is likewise optional and additive: when given (24K
+    was available this run), a second "24K Gold" block is appended with
+    the same rate/8g/10g/change/previous shape as the 22K section above
+    it. When omitted (the default -- also what happens when 24K was
+    unavailable this run), the message is byte-for-byte identical to the
+    22K-only version, so existing callers/tests are unaffected."""
+    rate_8g, rate_10g, change_line, previous_line = _rate_block(rate_per_gram, change, previous_rate)
 
-    previous_line = (
-        f"Previous:\n₹{format_inr(previous_rate)} / gram\n" if previous_rate is not None else ""
-    )
+    rate_24k_block = ""
+    if rate_24k_per_gram is not None:
+        rate_24k_8g, rate_24k_10g, change_24k_line, previous_24k_line = _rate_block(
+            rate_24k_per_gram, change_24k, previous_rate_24k
+        )
+        rate_24k_block = (
+            "\n24K Gold\n"
+            f"₹{format_inr(rate_24k_per_gram)} / gram\n"
+            f"8 grams: ₹{format_inr(rate_24k_8g)}\n"
+            f"10 grams: ₹{format_inr(rate_24k_10g)}\n"
+            "Change:\n"
+            f"{change_24k_line}\n"
+            f"{previous_24k_line}"
+        )
 
     return (
         "🪙 HYDERABAD GOLD RATE\n"
@@ -66,6 +95,7 @@ def build_message(
         "Change:\n"
         f"{change_line}\n"
         f"{previous_line}"
+        f"{rate_24k_block}"
         f"📅 {_display_date(date)}\n"
         f"🕘 Updated: {updated_time}\n"
         "Source: Goodreturns\n"

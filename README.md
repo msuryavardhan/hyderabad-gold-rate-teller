@@ -1,9 +1,10 @@
 # Hyderabad Gold Rate Teller
 
-A small, honest pipeline that fetches the daily **22K gold rate for
-Hyderabad, India** from
+A small, honest pipeline that fetches the daily **22K and 24K gold rates
+for Hyderabad, India** from
 [Goodreturns](https://www.goodreturns.in/gold-rates/hyderabad.html), stores
-history, calculates day-over-day change, and publishes it two ways:
+history for both purities, calculates day-over-day change independently
+for each, and publishes it two ways:
 
 - **Telegram** — a daily message to your phone.
 - **A mobile-first website** — hosted free on GitHub Pages, updated
@@ -189,18 +190,25 @@ Then open **http://localhost:8000** in a browser. Run
 python -m unittest discover -s tests -v
 ```
 
-44 tests, all passing, using Python's built-in `unittest` (no extra test
+96 tests, all passing, using Python's built-in `unittest` (no extra test
 framework installed). Covers:
 
-- Parsing the real, saved Goodreturns HTML and price-string edge cases
+- Parsing the real, saved Goodreturns HTML and price-string edge cases,
+  for **both 22K and 24K** independently (each has its own price card and
+  its own column in the "Last 10 Days" table -- column position is found
+  via the table header, not hardcoded)
 - 8g/10g calculation and change % / absolute calculation, incl. "no
-  previous rate"
-- Missing 22K card / malformed price / completely invalid HTML
-- Telegram message formatting
-- **JSON export**: valid payload shape, non-positive/invalid rate rejected
-  (prevents ever publishing bad data), history upsert/sort/trim, finding
-  the correct previous rate for change calculation, corrupt/missing
-  existing-file handling, and atomic write behaviour
+  previous rate", for both purities, with an explicit check that 22K and
+  24K changes are never conflated
+- Missing 22K/24K card / malformed price / completely invalid HTML
+- 24K unavailable-but-22K-still-succeeds handling (never fabricates a 24K
+  value, never fails the whole scrape over it)
+- Telegram message formatting, including the additive 24K section
+- **JSON export**: valid payload shape for both purities, non-positive/
+  invalid rate rejected (prevents ever publishing bad data), history
+  upsert/sort/trim/merge (never deletes an already-collected date),
+  finding the correct previous rate for change calculation, corrupt/
+  missing existing-file handling, and atomic write behaviour
 
 ## GitHub setup
 

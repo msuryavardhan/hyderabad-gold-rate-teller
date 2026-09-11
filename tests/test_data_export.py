@@ -19,10 +19,10 @@ from app.scraper import GoldRate
 SOURCE_URL = "https://www.goodreturns.in/gold-rates/hyderabad.html"
 
 
-def make_rate(rate_per_gram=14015.0, date="2026-09-11"):
+def make_rate(rate_per_gram=14015.0, date="2026-09-11", purity="22K"):
     return GoldRate(
         city="Hyderabad",
-        purity="22K",
+        purity=purity,
         rate_per_gram=rate_per_gram,
         date=date,
         source="Goodreturns",
@@ -102,6 +102,141 @@ class TestBuildJsonPayload(unittest.TestCase):
                 history=[],
                 source_url=SOURCE_URL,
             )
+
+
+class TestBuildJsonPayload24k(unittest.TestCase):
+    """The 22K fields above must stay exactly as they were -- these tests
+    cover the additive "gold_24k" section only."""
+
+    def test_existing_22k_structure_is_unchanged_when_24k_included(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=calculate_change(14015.0, 14255.0),
+            updated_at="2026-09-11T09:00:00+05:30",
+            history=[{"date": "2026-09-11", "rate_per_gram": 14015.0}],
+            source_url=SOURCE_URL,
+            rate_24k=make_rate(rate_per_gram=15289.0, purity="24K"),
+            rate_24k_8g=122312.0,
+            rate_24k_10g=152890.0,
+            change_24k=calculate_change(15289.0, 15551.0),
+            history_24k=[{"date": "2026-09-11", "rate_per_gram": 15289.0}],
+        )
+        # Top-level 22K fields: same shape/values as before this feature.
+        self.assertEqual(payload["purity"], "22K")
+        self.assertEqual(payload["current"]["rate_per_gram"], 14015.0)
+        self.assertEqual(payload["change"]["absolute"], -240)
+
+    def test_gold_24k_section_populated_with_real_values(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-11T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            rate_24k=make_rate(rate_per_gram=15289.0, purity="24K"),
+            rate_24k_8g=122312.0,
+            rate_24k_10g=152890.0,
+            change_24k=calculate_change(15289.0, 15551.0),
+            history_24k=[
+                {"date": "2026-09-10", "rate_per_gram": 15551.0},
+                {"date": "2026-09-11", "rate_per_gram": 15289.0},
+            ],
+        )
+        gold_24k = payload["gold_24k"]
+        self.assertEqual(gold_24k["purity"], "24K")
+        self.assertEqual(gold_24k["current"]["rate_per_gram"], 15289.0)
+        self.assertEqual(gold_24k["current"]["rate_8g"], 122312.0)
+        self.assertEqual(gold_24k["current"]["rate_10g"], 152890.0)
+        self.assertEqual(gold_24k["change"]["absolute"], -262)
+        self.assertEqual(len(gold_24k["history"]), 2)
+        json.dumps(payload)  # must stay serializable
+
+    def test_24k_omitted_by_default_is_null_not_fabricated(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-11T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+        )
+        gold_24k = payload["gold_24k"]
+        self.assertIsNone(gold_24k["current"])
+        self.assertIsNone(gold_24k["change"]["absolute"])
+        self.assertIsNone(gold_24k["change"]["percentage"])
+        self.assertEqual(gold_24k["history"], [])
+
+    def test_24k_unavailable_preserves_prior_24k_history(self):
+        # 24K's current rate is unavailable this run, but history collected
+        # on earlier runs must still be published, not wiped.
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-11T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            rate_24k=None,
+            history_24k=[{"date": "2026-09-10", "rate_per_gram": 15551.0}],
+        )
+        gold_24k = payload["gold_24k"]
+        self.assertIsNone(gold_24k["current"])
+        self.assertEqual(gold_24k["history"], [{"date": "2026-09-10", "rate_per_gram": 15551.0}])
+
+    def test_non_positive_24k_rate_is_rejected(self):
+        with self.assertRaises(DataExportError):
+            build_json_payload(
+                rate=make_rate(),
+                rate_8g=112120.0,
+                rate_10g=140150.0,
+                change=None,
+                updated_at="2026-09-11T09:00:00+05:30",
+                history=[],
+                source_url=SOURCE_URL,
+                rate_24k=make_rate(rate_per_gram=0, purity="24K"),
+                rate_24k_8g=0,
+                rate_24k_10g=0,
+            )
+
+    def test_missing_24k_gram_values_rejected(self):
+        with self.assertRaises(DataExportError):
+            build_json_payload(
+                rate=make_rate(),
+                rate_8g=112120.0,
+                rate_10g=140150.0,
+                change=None,
+                updated_at="2026-09-11T09:00:00+05:30",
+                history=[],
+                source_url=SOURCE_URL,
+                rate_24k=make_rate(rate_per_gram=15289.0, purity="24K"),
+                # rate_24k_8g / rate_24k_10g omitted -- must not proceed with
+                # a partially-fabricated 24K entry.
+            )
+
+    def test_22k_and_24k_changes_are_never_conflated(self):
+        payload = build_json_payload(
+            rate=make_rate(rate_per_gram=14015.0),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=calculate_change(14015.0, 14255.0),
+            updated_at="2026-09-11T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            rate_24k=make_rate(rate_per_gram=15289.0, purity="24K"),
+            rate_24k_8g=122312.0,
+            rate_24k_10g=152890.0,
+            change_24k=calculate_change(15289.0, 15551.0),
+            history_24k=[],
+        )
+        self.assertEqual(payload["change"]["absolute"], -240)
+        self.assertEqual(payload["gold_24k"]["change"]["absolute"], -262)
+        self.assertNotEqual(payload["change"]["absolute"], payload["gold_24k"]["change"]["absolute"])
 
 
 class TestUpsertHistory(unittest.TestCase):

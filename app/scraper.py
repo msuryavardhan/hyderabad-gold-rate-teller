@@ -47,6 +47,9 @@ USER_AGENT = (
 # Matches "22K", "22 K", "22 Karat", "22 Carat", "22k" etc.
 _PURITY_22K_RE = re.compile(r"\b22\s*(?:k\b|karat|carat)", re.IGNORECASE)
 
+# Matches "24K", "24 K", "24 Karat", "24 Carat", "24k" etc.
+_PURITY_24K_RE = re.compile(r"\b24\s*(?:k\b|karat|carat)", re.IGNORECASE)
+
 # The "Last 10 Days" history table's date column reads like "Sep 11, 2026".
 _HISTORY_DATE_FORMAT = "%b %d, %Y"
 
@@ -152,12 +155,15 @@ def _parse_page_date(soup: BeautifulSoup) -> str:
     return date_type.today().isoformat()
 
 
-def parse_hyderabad_22k(html: str) -> GoldRate:
-    """Parse the Goodreturns Hyderabad page HTML and extract the 22K rate.
+def _parse_current_rate_for_purity(html: str, purity_regex: "re.Pattern[str]", purity_label: str) -> GoldRate:
+    """Shared implementation behind parse_hyderabad_22k / parse_hyderabad_24k.
 
-    Raises GoldRateScraperError if the 22K rate cannot be confidently
-    identified (e.g. the site's markup changed). Never returns a fabricated
-    or guessed value.
+    Scans every price card, reads its label text, and only accepts the
+    value whose label matches purity_regex -- so if Goodreturns reorders
+    the cards, or changes ids, extraction still works as long as the label
+    wording and general card structure stay recognisable. Raises
+    GoldRateScraperError rather than guessing if that structure changes
+    enough that no matching card can be found.
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -174,7 +180,7 @@ def parse_hyderabad_22k(html: str) -> GoldRate:
         if not label_el:
             continue
         label_text = label_el.get_text(" ", strip=True)
-        if not _PURITY_22K_RE.search(label_text):
+        if not purity_regex.search(label_text):
             continue
 
         value_el = card.find(id=re.compile(r"price", re.IGNORECASE))
@@ -192,17 +198,17 @@ def parse_hyderabad_22k(html: str) -> GoldRate:
 
     if not candidates:
         raise GoldRateScraperError(
-            "Found gold price cards but none matched a 22K/22-carat label -- "
+            f"Found gold price cards but none matched a {purity_label} label -- "
             "Goodreturns' HTML structure may have changed."
         )
 
-    # If more than one 22K candidate is found (e.g. duplicated markup),
-    # they should agree; if they don't, we cannot be confident which is
-    # the current retail rate, so fail loudly rather than guess.
+    # If more than one candidate is found (e.g. duplicated markup), they
+    # should agree; if they don't, we cannot be confident which is the
+    # current retail rate, so fail loudly rather than guess.
     unique_values = set(candidates)
     if len(unique_values) > 1:
         raise GoldRateScraperError(
-            f"Multiple conflicting 22K rate values found on the page: "
+            f"Multiple conflicting {purity_label} rate values found on the page: "
             f"{sorted(unique_values)} -- refusing to guess."
         )
 
@@ -211,11 +217,31 @@ def parse_hyderabad_22k(html: str) -> GoldRate:
 
     return GoldRate(
         city=CITY,
-        purity="22K",
+        purity=purity_label,
         rate_per_gram=rate_per_gram,
         date=rate_date,
         source=SOURCE_NAME,
     )
+
+
+def parse_hyderabad_22k(html: str) -> GoldRate:
+    """Parse the Goodreturns Hyderabad page HTML and extract the 22K rate.
+
+    Raises GoldRateScraperError if the 22K rate cannot be confidently
+    identified (e.g. the site's markup changed). Never returns a fabricated
+    or guessed value.
+    """
+    return _parse_current_rate_for_purity(html, _PURITY_22K_RE, "22K")
+
+
+def parse_hyderabad_24k(html: str) -> GoldRate:
+    """Parse the Goodreturns Hyderabad page HTML and extract the 24K rate.
+
+    Same approach and same guarantees as parse_hyderabad_22k, applied to
+    the 24K price card instead. Raises GoldRateScraperError rather than
+    fabricating or interpolating a 24K value from the 22K one.
+    """
+    return _parse_current_rate_for_purity(html, _PURITY_24K_RE, "24K")
 
 
 def get_hyderabad_22k_rate(
@@ -238,17 +264,22 @@ def get_hyderabad_22k_rate(
     return rate
 
 
-def parse_hyderabad_22k_history(html: str) -> list[GoldRate]:
-    """Parses Goodreturns' own "Gold Rate in Hyderabad for Last 10 Days
-    (1 gram)" table into a list of GoldRate records (newest first, as the
-    page presents them).
+def _parse_history_table_for_purity(
+    html: str, purity_regex: "re.Pattern[str]", purity_label: str
+) -> list[GoldRate]:
+    """Shared implementation behind parse_hyderabad_22k_history /
+    parse_hyderabad_24k_history.
 
-    Like parse_hyderabad_22k, this does not hardcode "the 3rd column is
-    22K" -- it reads the table's <thead> to find which column is the date
-    and which is 22K, so a reordering of columns doesn't silently break
-    extraction. It raises GoldRateScraperError only when the table (or a
-    usable 22K column within it) cannot be found at all, or when none of
-    its rows can be parsed -- i.e. when the page structure has genuinely
+    Parses Goodreturns' own "Gold Rate in Hyderabad for Last 10 Days
+    (1 gram)" table into a list of GoldRate records (newest first, as the
+    page presents them) for whichever purity column matches purity_regex.
+
+    Does not hardcode a fixed column position -- it reads the table's
+    <thead> to find which column is the date and which matches
+    purity_regex, so a reordering of columns doesn't silently break
+    extraction. Raises GoldRateScraperError only when the table (or a
+    usable matching column within it) cannot be found at all, or when none
+    of its rows can be parsed -- i.e. when the page structure has genuinely
     changed. A row with an unparseable date or price is skipped with a
     warning rather than failing the whole scrape, since Goodreturns
     occasionally leaves a row blank; skipping is not fabrication, it is
@@ -285,12 +316,12 @@ def parse_hyderabad_22k_history(html: str) -> list[GoldRate]:
     header_cells = [th.get_text(strip=True) for th in thead.find_all("th")]
     date_col = next((i for i, text in enumerate(header_cells) if "date" in text.lower()), 0)
     purity_col = next(
-        (i for i, text in enumerate(header_cells) if _PURITY_22K_RE.search(text)), None
+        (i for i, text in enumerate(header_cells) if purity_regex.search(text)), None
     )
     if purity_col is None:
         raise GoldRateScraperError(
-            "Historical rate table has no 22K column -- Goodreturns' HTML "
-            "structure may have changed."
+            f"Historical rate table has no {purity_label} column -- Goodreturns' "
+            "HTML structure may have changed."
         )
 
     records: list[GoldRate] = []
@@ -321,16 +352,35 @@ def parse_hyderabad_22k_history(html: str) -> list[GoldRate]:
             continue
 
         records.append(
-            GoldRate(city=CITY, purity="22K", rate_per_gram=row_rate, date=row_date, source=SOURCE_NAME)
+            GoldRate(city=CITY, purity=purity_label, rate_per_gram=row_rate, date=row_date, source=SOURCE_NAME)
         )
 
     if not records:
         raise GoldRateScraperError(
-            "Historical rate table was found but no valid 22K rows could be "
-            "parsed from it -- Goodreturns' HTML structure may have changed."
+            f"Historical rate table was found but no valid {purity_label} rows "
+            "could be parsed from it -- Goodreturns' HTML structure may have changed."
         )
 
     return records
+
+
+def parse_hyderabad_22k_history(html: str) -> list[GoldRate]:
+    """Parses Goodreturns' "Last 10 Days" table for the 22K column.
+
+    See _parse_history_table_for_purity for the shared implementation and
+    its guarantees (no fixed column position, no fabrication, raises only
+    when the table/column genuinely can't be found).
+    """
+    return _parse_history_table_for_purity(html, _PURITY_22K_RE, "22K")
+
+
+def parse_hyderabad_24k_history(html: str) -> list[GoldRate]:
+    """Parses Goodreturns' "Last 10 Days" table for the 24K column.
+
+    Same approach and guarantees as parse_hyderabad_22k_history, applied
+    to the 24K column instead.
+    """
+    return _parse_history_table_for_purity(html, _PURITY_24K_RE, "24K")
 
 
 def get_hyderabad_22k_with_history(
@@ -357,10 +407,68 @@ def get_hyderabad_22k_with_history(
     return rate, history
 
 
+def get_hyderabad_gold_rates(
+    url: str = SOURCE_URL, timeout: int = REQUEST_TIMEOUT_SECONDS
+) -> dict:
+    """Fetches the page once and returns today's rate + "Last 10 Days"
+    history for BOTH 22K and 24K.
+
+    Returns:
+        {
+            "22K": {"current": GoldRate, "history": [GoldRate, ...]},
+            "24K": {"current": Optional[GoldRate], "history": [GoldRate, ...]},
+        }
+
+    22K is treated as required: a failure to parse either the current 22K
+    rate or its history raises GoldRateScraperError, exactly like
+    get_hyderabad_22k_with_history (this pipeline's original, established
+    behaviour is unchanged).
+
+    24K is treated as best-effort: if the 24K price card or its historical
+    column can't be parsed, that half of the result is reported as
+    unavailable ("current": None / "history": []) rather than raising or
+    fabricating a value from the 22K rate. Callers must preserve any
+    already-collected 24K history when this happens, not delete it.
+    """
+    logger.info("Fetching %s ...", url)
+    html = fetch_page(url, timeout=timeout)
+
+    rate_22k = parse_hyderabad_22k(html)
+    history_22k = parse_hyderabad_22k_history(html)
+    logger.info(
+        "Hyderabad 22K rate found: ₹%s/g (as of %s); %d historical row(s) parsed",
+        f"{rate_22k.rate_per_gram:,.2f}",
+        rate_22k.date,
+        len(history_22k),
+    )
+
+    try:
+        rate_24k = parse_hyderabad_24k(html)
+        logger.info("Hyderabad 24K rate found: ₹%s/g (as of %s)", f"{rate_24k.rate_per_gram:,.2f}", rate_24k.date)
+    except GoldRateScraperError as exc:
+        logger.warning("24K current rate unavailable this run: %s", exc)
+        rate_24k = None
+
+    try:
+        history_24k = parse_hyderabad_24k_history(html)
+        logger.info("%d historical 24K row(s) parsed", len(history_24k))
+    except GoldRateScraperError as exc:
+        logger.warning("24K historical data unavailable this run: %s", exc)
+        history_24k = []
+
+    return {
+        "22K": {"current": rate_22k, "history": history_22k},
+        "24K": {"current": rate_24k, "history": history_24k},
+    }
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    result, history_result = get_hyderabad_22k_with_history()
-    print(result.as_dict())
-    print(f"{len(history_result)} historical row(s):")
-    for entry in history_result:
-        print(" ", entry.date, entry.rate_per_gram)
+    data = get_hyderabad_gold_rates()
+    for purity in ("22K", "24K"):
+        current = data[purity]["current"]
+        history = data[purity]["history"]
+        print(f"{purity}:", current.as_dict() if current else "unavailable")
+        print(f"  {len(history)} historical row(s):")
+        for entry in history:
+            print("   ", entry.date, entry.rate_per_gram)

@@ -10,6 +10,11 @@
   --accent: #a86a1f;
   --accent-strong: #7a4c14;
   --accent-soft: #f6e9d3;
+  /* A visibly different gold tone for 24K, so the two cards/charts are
+     distinguishable at a glance even without reading the labels. */
+  --accent-24k: #b8860b;
+  --accent-24k-strong: #8a6508;
+  --accent-24k-soft: #f2e7c9;
   --up-bg: #e7f6ec;
   --up-text: #167a3d;
   --down-bg: #fbe9e9;
@@ -31,6 +36,9 @@
     --accent: #e0a94a;
     --accent-strong: #f2c579;
     --accent-soft: #34290f;
+    --accent-24k: #e8c04d;
+    --accent-24k-strong: #f5d876;
+    --accent-24k-soft: #3a2f0d;
     --up-bg: #133423;
     --up-text: #5fd68b;
     --down-bg: #3a1c1c;
@@ -219,6 +227,14 @@ main {
   color: var(--accent-strong);
 }
 
+.rate-value.unavailable {
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--text-muted);
+  letter-spacing: normal;
+}
+
 .change-line {
   margin: 10px 0 0;
   min-height: 28px;
@@ -282,6 +298,42 @@ main {
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin: 0 0 2px;
+}
+
+/* --- 24K card: same layout as the 22K card, distinct accent colour so
+   the two are visually distinguishable at a glance --- */
+
+.purity-24k {
+  color: var(--accent-24k-strong);
+}
+
+.rate-card-24k .rupee {
+  color: var(--accent-24k-strong);
+}
+
+.rate-card-24k .rate-tile {
+  background: var(--accent-24k-soft);
+}
+
+.rate-card-24k .change-pill.up {
+  background: var(--up-bg);
+  color: var(--up-text);
+}
+
+.rate-card-24k .change-pill.down {
+  background: var(--down-bg);
+  color: var(--down-text);
+}
+
+.chart-subheading {
+  margin: 16px 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.history-card .chart-subheading:first-of-type {
+  margin-top: 0;
 }
 
 .meta-item dd {
@@ -390,6 +442,29 @@ main {
   pointer-events: none;
 }
 
+/* The 24K chart reuses the same chart-* classes but with its own accent
+   colour, scoped to its wrapper, so the two charts read as distinct. */
+#chart-wrap-24k .chart-line {
+  stroke: var(--accent-24k);
+}
+
+#chart-wrap-24k .chart-fill {
+  fill: var(--accent-24k-soft);
+}
+
+#chart-wrap-24k .chart-dot,
+#chart-wrap-24k .chart-active-dot {
+  fill: var(--accent-24k-strong);
+}
+
+#chart-wrap-24k .chart-hit:focus-visible {
+  fill: var(--accent-24k-soft);
+}
+
+#chart-tooltip-24k .chart-tooltip-value {
+  color: var(--accent-24k-strong);
+}
+
 .chart-tooltip {
   position: absolute;
   left: 0;
@@ -493,6 +568,63 @@ main {
 .recent-value {
   font-weight: 700;
   font-size: 1rem;
+}
+
+/* --- Recent rates table (22K + 24K side by side) --- */
+
+.recent-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.recent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.recent-table th {
+  text-align: right;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: 0 0 8px;
+}
+
+.recent-table th:first-child {
+  text-align: left;
+}
+
+.recent-table td {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recent-table td:first-child {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.recent-table td.value-22k {
+  color: var(--text);
+}
+
+.recent-table td.value-24k {
+  color: var(--accent-24k-strong);
+}
+
+.recent-table td.value-unavailable {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-style: italic;
+  font-size: 0.82rem;
 }
 
 /* --- Source / footer --- */

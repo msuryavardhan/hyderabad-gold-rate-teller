@@ -145,17 +145,52 @@ def build_json_payload(
     updated_at: str,
     history: list[dict],
     source_url: str,
+    rate_24k: Optional[GoldRate] = None,
+    rate_24k_8g: Optional[float] = None,
+    rate_24k_10g: Optional[float] = None,
+    change_24k: Optional[RateChange] = None,
+    history_24k: Optional[list[dict]] = None,
 ) -> dict:
     """Shapes the public JSON payload. Raises DataExportError instead of
     returning a payload if the inputs look invalid -- this is the guard
     that prevents an invalid rate from ever overwriting the last known
-    good data file."""
+    good data file.
+
+    All top-level fields (source, city, purity, current, change, date,
+    history, ...) describe the 22K rate exactly as before -- unchanged,
+    for backward compatibility with anything already reading this file.
+    24K data is added under a new "gold_24k" key with the same current/
+    change/history shape, so it's easy to find without disturbing the
+    existing structure.
+
+    rate_24k is optional: when it's None (24K was unavailable on this
+    run -- e.g. its price card or table column couldn't be parsed),
+    "gold_24k.current" and "gold_24k.change" are emitted as null rather
+    than fabricated, while "gold_24k.history" (whatever was already
+    collected, possibly extended by history_24k) is preserved untouched.
+    """
     if rate.rate_per_gram is None or rate.rate_per_gram <= 0:
         raise DataExportError(f"Refusing to publish a non-positive rate: {rate.rate_per_gram!r}")
     if rate_8g <= 0 or rate_10g <= 0:
         raise DataExportError("Refusing to publish non-positive 8g/10g values")
     if not _DATE_RE.match(rate.date or ""):
         raise DataExportError(f"Refusing to publish an invalid date: {rate.date!r}")
+
+    gold_24k_current = None
+    if rate_24k is not None:
+        if rate_24k.rate_per_gram is None or rate_24k.rate_per_gram <= 0:
+            raise DataExportError(
+                f"Refusing to publish a non-positive 24K rate: {rate_24k.rate_per_gram!r}"
+            )
+        if rate_24k_8g is None or rate_24k_10g is None or rate_24k_8g <= 0 or rate_24k_10g <= 0:
+            raise DataExportError("Refusing to publish non-positive 24K 8g/10g values")
+        if not _DATE_RE.match(rate_24k.date or ""):
+            raise DataExportError(f"Refusing to publish an invalid 24K date: {rate_24k.date!r}")
+        gold_24k_current = {
+            "rate_per_gram": round(rate_24k.rate_per_gram, 2),
+            "rate_8g": round(rate_24k_8g, 2),
+            "rate_10g": round(rate_24k_10g, 2),
+        }
 
     return {
         "source": rate.source,
@@ -174,6 +209,15 @@ def build_json_payload(
         "date": rate.date,
         "updated_at": updated_at,
         "history": history,
+        "gold_24k": {
+            "purity": "24K",
+            "current": gold_24k_current,
+            "change": {
+                "absolute": change_24k.absolute if change_24k is not None else None,
+                "percentage": change_24k.percentage if change_24k is not None else None,
+            },
+            "history": history_24k if history_24k is not None else [],
+        },
     }
 
 
