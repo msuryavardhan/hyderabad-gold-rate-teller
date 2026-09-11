@@ -174,7 +174,6 @@ def main() -> int:
         rate_per_gram=rate.rate_per_gram,
         date=rate.date,
         change=change,
-        updated_time=datetime.now().strftime("%H:%M"),
         previous_rate=previous_rate,
         rate_24k_per_gram=rate_24k.rate_per_gram if rate_24k is not None else None,
         change_24k=change_24k,

@@ -255,6 +255,66 @@ where to obtain and where to paste them.)*
 If the secrets are not set, the pipeline still runs and still publishes the
 website — it just logs a warning and skips the Telegram step.
 
+### Example Telegram message
+
+```
+🪙 Hyderabad Gold Rate
+
+📅 11 September 2026
+
+22K / 916 Gold
+₹14,015 / gram
+Previous: ₹14,255 / gram
+Change: ↓ ₹240 (-1.68%)
+8g: ₹1,12,120
+10g: ₹1,40,150
+
+24K Gold
+₹15,289 / gram
+Previous: ₹15,551 / gram
+Change: ↓ ₹262 (-1.68%)
+8g: ₹1,22,312
+10g: ₹1,52,890
+
+Source: Goodreturns
+https://www.goodreturns.in/gold-rates/hyderabad.html
+```
+
+`↑`/`↓` show direction, `→ No change` when the rate is unchanged, and
+`Previous: Not available` (with `Change: Not available`) on a day with
+nothing earlier to compare against — never a guessed number. The 24K
+block is only included when Goodreturns' 24K data was actually parsed
+that run.
+
+### Testing Telegram locally (without committing any secret)
+
+To send one real message from your own machine, without ever putting the
+token/chat ID in a file that's tracked by git:
+
+1. `copy .env.example .env` (if you haven't already) — `.env` is listed in
+   `.gitignore`, so it is never committed.
+2. Open `.env` in a text editor and fill in your real
+   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (obtained above).
+3. Run either pipeline entry point — both call the same Telegram code:
+   ```bash
+   python scripts/update_gold_rate_data.py
+   ```
+4. Check the log line: `Telegram notification sent` means Telegram's API
+   accepted it (check your chat); `Telegram notification not sent: ...`
+   means it didn't, with the reason -- never the token itself.
+5. When you're done testing, you can delete the values from `.env` or
+   delete the file entirely — it was never committed either way.
+
+If you'd rather not create a file at all, PowerShell can set the
+variables for just the current terminal session instead (they disappear
+when you close it, and are never written anywhere):
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "your token here"
+$env:TELEGRAM_CHAT_ID = "your chat id here"
+python scripts/update_gold_rate_data.py
+```
+
 ## GitHub Pages
 
 The site deploys via the `deploy-pages.yml` workflow (GitHub's official

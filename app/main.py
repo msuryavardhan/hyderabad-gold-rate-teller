@@ -107,10 +107,12 @@ def run(send_notification: bool = True) -> int:
 
     # --- Historical comparison ---
     change = None
+    previous_rate = None
     if db is not None:
         previous = db.get_latest_before(rate.date, rate.city, rate.purity)
         if previous is not None:
-            change = calculate_change(rate.rate_per_gram, previous.rate_per_gram)
+            previous_rate = previous.rate_per_gram
+            change = calculate_change(rate.rate_per_gram, previous_rate)
 
     if change is not None:
         print("Change:")
@@ -124,7 +126,7 @@ def run(send_notification: bool = True) -> int:
             rate_per_gram=rate.rate_per_gram,
             date=rate.date,
             change=change,
-            updated_time=updated_time,
+            previous_rate=previous_rate,
         )
         try:
             send_telegram_message(message)
