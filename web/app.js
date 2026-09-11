@@ -44,6 +44,10 @@
     els.rangeButtons = Array.prototype.slice.call(document.querySelectorAll(".range-btn"));
 
     els.recentList = document.getElementById("recent-list");
+
+    els.tooltip = document.getElementById("chart-tooltip");
+    els.tooltipDate = document.getElementById("tooltip-date");
+    els.tooltipValue = document.getElementById("tooltip-value");
   }
 
   function showState(name) {
@@ -72,6 +76,20 @@
       grouped = parts.join(",") + "," + last3;
     }
     return (negative ? "-" : "") + grouped;
+  }
+
+  var MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Fixed 3-letter abbreviation regardless of browser/locale (some locales
+  // render "Sept" instead of "Sep" via Intl -- this keeps the tooltip
+  // format exact and consistent everywhere).
+  function formatTooltipDate(isoDate) {
+    var parts = (isoDate || "").split("-");
+    if (parts.length !== 3) return isoDate || "--";
+    var year = parts[0];
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    return day + " " + (MONTH_ABBR[month - 1] || "") + " " + year;
   }
 
   function formatDisplayDate(isoDate) {
@@ -185,11 +203,72 @@
     return sorted.slice(-days);
   }
 
+  // --- Chart tooltip (works for both mouse hover and touch tap) ---
+
+  function hideTooltip() {
+    if (!els.tooltip) return;
+    els.tooltip.hidden = true;
+    state.activeIndex = null;
+    var activeDot = els.chart.querySelector(".chart-active-dot");
+    if (activeDot) activeDot.setAttribute("r", 0);
+  }
+
+  function highlightPoint(index) {
+    var activeDot = els.chart.querySelector(".chart-active-dot");
+    var hitEl = els.chart.querySelector('.chart-hit[data-point-index="' + index + '"]');
+    if (!activeDot || !hitEl) return;
+    activeDot.setAttribute("cx", hitEl.getAttribute("cx"));
+    activeDot.setAttribute("cy", hitEl.getAttribute("cy"));
+    activeDot.setAttribute("r", 5);
+  }
+
+  function positionTooltip(hitEl) {
+    var wrapRect = els.chartWrap.getBoundingClientRect();
+    var hitRect = hitEl.getBoundingClientRect();
+    var centerX = hitRect.left + hitRect.width / 2 - wrapRect.left;
+    var topY = hitRect.top - wrapRect.top;
+
+    els.tooltip.style.left = centerX + "px";
+    els.tooltip.style.top = topY + "px";
+    els.tooltip.style.transform = "translate(-50%, calc(-100% - 12px))";
+
+    // Clamp horizontally so the tooltip is never clipped outside the
+    // chart card, e.g. for the first/last point on a narrow phone screen.
+    var tooltipRect = els.tooltip.getBoundingClientRect();
+    var cardRect = els.chartWrap.closest(".card").getBoundingClientRect();
+    var shift = 0;
+    if (tooltipRect.right > cardRect.right - 4) {
+      shift = cardRect.right - 4 - tooltipRect.right;
+    } else if (tooltipRect.left < cardRect.left + 4) {
+      shift = cardRect.left + 4 - tooltipRect.left;
+    }
+    if (shift !== 0) {
+      els.tooltip.style.transform = "translate(calc(-50% + " + shift.toFixed(1) + "px), calc(-100% - 12px))";
+    }
+  }
+
+  function showTooltipForIndex(index) {
+    var points = state.chartPoints;
+    if (!points || !points[index] || !els.tooltip) return;
+
+    var point = points[index];
+    state.activeIndex = index;
+    els.tooltipDate.textContent = formatTooltipDate(point.date);
+    els.tooltipValue.textContent = "₹" + formatInr(point.rate_per_gram) + " / gram";
+    els.tooltip.hidden = false;
+
+    var hitEl = els.chart.querySelector('.chart-hit[data-point-index="' + index + '"]');
+    if (hitEl) positionTooltip(hitEl);
+    highlightPoint(index);
+  }
+
   function renderChart() {
     var payload = state.payload;
     if (!payload) return;
 
+    hideTooltip();
     var points = historyForRange(payload.history, state.range);
+    state.chartPoints = points;
     var svg = els.chart;
 
     // Clear everything except the accessible <title>, then rebuild.
@@ -291,6 +370,55 @@
       label.textContent = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
       svg.appendChild(label);
     });
+
+    // Active-point highlight (shown only while a tooltip is open).
+    var activeDot = document.createElementNS(ns, "circle");
+    activeDot.setAttribute("class", "chart-active-dot");
+    activeDot.setAttribute("r", 0);
+    svg.appendChild(activeDot);
+
+    // One generously-sized, invisible hit target per point, for both
+    // mouse hover (desktop) and tap (mobile/touch) -- see showTooltipForIndex.
+    points.forEach(function (p, i) {
+      var hit = document.createElementNS(ns, "circle");
+      hit.setAttribute("cx", xFor(i).toFixed(2));
+      hit.setAttribute("cy", yFor(p.rate_per_gram).toFixed(2));
+      hit.setAttribute("r", 14);
+      hit.setAttribute("class", "chart-hit");
+      hit.setAttribute("data-point-index", String(i));
+      hit.setAttribute("tabindex", "0");
+      hit.setAttribute("role", "button");
+      hit.setAttribute(
+        "aria-label",
+        formatTooltipDate(p.date) + ", 22K gold rate ₹" + formatInr(p.rate_per_gram) + " per gram"
+      );
+
+      hit.addEventListener("mouseenter", function () {
+        showTooltipForIndex(i);
+      });
+      hit.addEventListener("mouseleave", function () {
+        hideTooltip();
+      });
+      hit.addEventListener("focus", function () {
+        showTooltipForIndex(i);
+      });
+      hit.addEventListener("blur", function () {
+        hideTooltip();
+      });
+      // `click` fires for both a mouse click and a touch tap (without
+      // needing touchstart/touchmove handlers that would risk blocking
+      // normal page scrolling), so this alone covers mobile tap-to-show.
+      hit.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (state.activeIndex === i && !els.tooltip.hidden) {
+          hideTooltip();
+        } else {
+          showTooltipForIndex(i);
+        }
+      });
+
+      svg.appendChild(hit);
+    });
   }
 
   function setRange(days) {
@@ -343,6 +471,17 @@
     cacheElements();
     attachRangeButtons();
     els.retryButton.addEventListener("click", load);
+
+    // Dismiss the tooltip on a tap/click anywhere outside the chart, and
+    // on resize (its position is computed from live element rects, which
+    // a resize would make stale until the next hover/tap).
+    document.addEventListener("click", function (e) {
+      if (els.chartWrap && !els.chartWrap.contains(e.target)) {
+        hideTooltip();
+      }
+    });
+    window.addEventListener("resize", hideTooltip);
+
     load();
   });
 })();

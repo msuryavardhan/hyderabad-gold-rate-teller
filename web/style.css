@@ -87,6 +87,14 @@ body {
   letter-spacing: -0.01em;
 }
 
+.author-credit {
+  margin: 6px 0 0;
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .subtitle {
   margin: 4px 0 0;
   color: var(--text-muted);
@@ -327,6 +335,7 @@ main {
 }
 
 .chart-wrap {
+  position: relative;
   margin-top: 12px;
   width: 100%;
 }
@@ -336,6 +345,8 @@ main {
   height: auto;
   display: block;
   overflow: visible;
+  /* Points are interactive (hover/tap); the line/fill itself isn't. */
+  touch-action: pan-y;
 }
 
 .chart-line {
@@ -354,6 +365,85 @@ main {
 
 .chart-dot {
   fill: var(--accent-strong);
+}
+
+/* Invisible, generously-sized hit target on every point -- large enough
+   for a fingertip, transparent so it doesn't change the chart's look. */
+.chart-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.chart-hit:focus {
+  outline: none;
+}
+
+.chart-hit:focus-visible {
+  fill: var(--accent-soft);
+  opacity: 0.5;
+}
+
+.chart-active-dot {
+  fill: var(--accent-strong);
+  stroke: var(--bg-elevated);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.chart-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 8px 12px;
+  min-width: 118px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.chart-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.chart-tooltip-date {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.chart-tooltip-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.chart-tooltip-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--accent-strong);
+  margin-top: 2px;
+}
+
+.chart-hint {
+  margin: 8px 0 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .chart-grid {
@@ -435,4 +525,10 @@ main {
 
 .page-footer a {
   color: var(--text-muted);
+}
+
+.footer-credit {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  opacity: 0.85;
 }

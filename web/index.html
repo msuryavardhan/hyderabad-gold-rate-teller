@@ -13,6 +13,7 @@
   <div class="page">
     <header class="page-header">
       <h1>🪙 Hyderabad Gold Rate</h1>
+      <p class="author-credit">Manchikanti Surya Vardhan</p>
       <p class="subtitle">22K / 916 Gold &middot; Goodreturns</p>
     </header>
 
@@ -73,7 +74,13 @@
             <svg id="chart" viewBox="0 0 320 140" preserveAspectRatio="none" role="img" aria-labelledby="chart-desc">
               <title id="chart-desc">22K gold rate per gram over time</title>
             </svg>
+            <div id="chart-tooltip" class="chart-tooltip" role="status" aria-live="polite" hidden>
+              <div id="tooltip-date" class="chart-tooltip-date">--</div>
+              <div class="chart-tooltip-label">22K Gold Rate</div>
+              <div id="tooltip-value" class="chart-tooltip-value">--</div>
+            </div>
           </div>
+          <p class="chart-hint">Tap or hover a point for details</p>
           <p id="history-note" class="history-note" hidden>
             Not enough history yet &mdash; check back after a few more daily updates.
           </p>
@@ -99,6 +106,7 @@
 
     <footer class="page-footer">
       <p>Updated automatically once a day &middot; <a href="https://github.com/msuryavardhan/hyderabad-gold-rate-teller" target="_blank" rel="noopener noreferrer">source code</a></p>
+      <p class="footer-credit">Developed by Manchikanti Surya Vardhan</p>
     </footer>
   </div>
 
