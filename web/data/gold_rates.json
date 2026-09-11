@@ -1,0 +1,23 @@
+{
+  "source": "Goodreturns",
+  "source_url": "https://www.goodreturns.in/gold-rates/hyderabad.html",
+  "city": "Hyderabad",
+  "purity": "22K",
+  "current": {
+    "rate_per_gram": 14015.0,
+    "rate_8g": 112120.0,
+    "rate_10g": 140150.0
+  },
+  "change": {
+    "absolute": null,
+    "percentage": null
+  },
+  "date": "2026-09-11",
+  "updated_at": "2026-09-11T11:25:45+05:30",
+  "history": [
+    {
+      "date": "2026-09-11",
+      "rate_per_gram": 14015.0
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+name: Daily Gold Rate Update
+
+# Schedule note: GitHub Actions cron always runs in UTC. India Standard
+# Time (IST) is UTC+5:30 year-round (no daylight saving), so 09:00 IST is
+# 03:30 UTC on the same calendar day.
+#   09:00 IST  ==  03:30 UTC
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch: {} # allows a manual "Run workflow" click for testing
+
+permissions:
+  contents: write # needed to commit the updated data file back
+
+concurrency:
+  group: daily-gold-rate-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run existing test suite
+        run: python -m unittest discover -s tests -v
+
+      # This step fetches Goodreturns, validates the 22K Hyderabad rate,
+      # and writes web/data/gold_rates.json ONLY on success. If the site is
+      # unreachable or the rate can't be confidently extracted, the script
+      # exits non-zero, this step fails, and every step below is skipped --
+      # so nothing is ever committed on a failed/invalid scrape, and the
+      # last known good data file stays exactly as it was.
+      - name: Fetch Hyderabad 22K gold rate and update public data
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/update_gold_rate_data.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- web/data/gold_rates.json; then
+            echo "No changes to web/data/gold_rates.json; nothing to commit."
+          else
+            git add web/data/gold_rates.json
+            git commit -m "Update Hyderabad 22K gold rate data [skip ci]"
+            git push
+          fi

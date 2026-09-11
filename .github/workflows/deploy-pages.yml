@@ -1,0 +1,55 @@
+name: Deploy Pages
+
+# Two triggers are needed to make this genuinely automatic:
+#
+# 1. `push` on web/** -- fires when a human pushes a frontend change
+#    directly (normal GitHub push events).
+# 2. `workflow_run` on "Daily Gold Rate Update" -- fires when that workflow
+#    finishes. This is required because GitHub Actions deliberately does
+#    NOT trigger `push`-based workflows for commits made by the built-in
+#    GITHUB_TOKEN (to avoid infinite workflow loops) -- and the daily data
+#    workflow commits using that token. Without this trigger, a daily data
+#    update would never redeploy the site.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "web/**"
+  workflow_run:
+    workflows: ["Daily Gold Rate Update"]
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skip if this was triggered by a failed daily-update run (nothing new
+    # to deploy, and no reason to spend Pages minutes on it).
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload web/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

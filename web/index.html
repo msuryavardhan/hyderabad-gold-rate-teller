@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hyderabad Gold Rate</title>
+  <meta name="description" content="Daily Hyderabad 22K gold rate, sourced from Goodreturns." />
+  <meta name="theme-color" content="#8a5a1f" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪙</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>🪙 Hyderabad Gold Rate</h1>
+      <p class="subtitle">22K / 916 Gold &middot; Goodreturns</p>
+    </header>
+
+    <main>
+      <!-- Loading state -->
+      <section id="loading-state" class="state-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Fetching latest rate&hellip;</p>
+      </section>
+
+      <!-- Error state -->
+      <section id="error-state" class="state-card error" hidden>
+        <p class="error-icon" aria-hidden="true">⚠️</p>
+        <p class="error-title">Couldn't load the latest rate</p>
+        <p id="error-detail" class="error-detail"></p>
+        <button id="retry-button" type="button" class="retry-button">Try again</button>
+      </section>
+
+      <!-- Main content -->
+      <div id="content" hidden>
+        <section class="card rate-card" aria-labelledby="rate-heading">
+          <h2 id="rate-heading" class="card-eyebrow">Rate per gram</h2>
+          <p class="rate-value"><span class="rupee">₹</span><span id="rate-per-gram">--</span></p>
+          <p id="change-line" class="change-line" aria-live="polite">&nbsp;</p>
+
+          <div class="rate-grid">
+            <div class="rate-tile">
+              <span class="tile-label">8 grams</span>
+              <span class="tile-value" id="rate-8g">--</span>
+            </div>
+            <div class="rate-tile">
+              <span class="tile-label">10 grams</span>
+              <span class="tile-value" id="rate-10g">--</span>
+            </div>
+          </div>
+
+          <dl class="meta-row">
+            <div class="meta-item">
+              <dt>Date</dt>
+              <dd id="rate-date">--</dd>
+            </div>
+            <div class="meta-item">
+              <dt>Last fetched</dt>
+              <dd id="rate-updated">--</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="card history-card" aria-labelledby="history-heading">
+          <div class="history-header">
+            <h2 id="history-heading" class="card-eyebrow">History</h2>
+            <div class="range-toggle" role="group" aria-label="History range">
+              <button type="button" class="range-btn" data-range="7" aria-pressed="true">7D</button>
+              <button type="button" class="range-btn" data-range="30" aria-pressed="false">30D</button>
+            </div>
+          </div>
+          <div id="chart-wrap" class="chart-wrap">
+            <svg id="chart" viewBox="0 0 320 140" preserveAspectRatio="none" role="img" aria-labelledby="chart-desc">
+              <title id="chart-desc">22K gold rate per gram over time</title>
+            </svg>
+          </div>
+          <p id="history-note" class="history-note" hidden>
+            Not enough history yet &mdash; check back after a few more daily updates.
+          </p>
+        </section>
+
+        <section class="card source-card">
+          <p>
+            Source: <strong>Goodreturns</strong> &middot;
+            <a id="source-link" href="https://www.goodreturns.in/gold-rates/hyderabad.html" target="_blank" rel="noopener noreferrer">view original page</a>
+          </p>
+          <p class="disclaimer">
+            This is Goodreturns' published Hyderabad retail 22K gold rate. It is
+            <strong>not</strong> an official government, IBJA, or MCX rate.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="page-footer">
+      <p>Updated automatically once a day &middot; <a href="https://github.com/msuryavardhan/hyderabad-gold-rate-teller" target="_blank" rel="noopener noreferrer">source code</a></p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

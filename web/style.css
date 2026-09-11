@@ -1,0 +1,407 @@
+/* Hyderabad Gold Rate Teller — mobile-first dashboard styles
+   Plain CSS, no build step, no framework. */
+
+:root {
+  --bg: #f6f3ee;
+  --bg-elevated: #ffffff;
+  --border: #e7e0d4;
+  --text: #241f18;
+  --text-muted: #6b6152;
+  --accent: #a86a1f;
+  --accent-strong: #7a4c14;
+  --accent-soft: #f6e9d3;
+  --up-bg: #e7f6ec;
+  --up-text: #167a3d;
+  --down-bg: #fbe9e9;
+  --down-text: #c23636;
+  --neutral-bg: #f0eee9;
+  --neutral-text: #6b6152;
+  --shadow: 0 8px 24px rgba(60, 45, 20, 0.08), 0 2px 6px rgba(60, 45, 20, 0.05);
+  --radius: 16px;
+  --focus-ring: #7a4c14;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14110c;
+    --bg-elevated: #1e1912;
+    --border: #33291b;
+    --text: #f3ecdf;
+    --text-muted: #b7ab95;
+    --accent: #e0a94a;
+    --accent-strong: #f2c579;
+    --accent-soft: #34290f;
+    --up-bg: #133423;
+    --up-text: #5fd68b;
+    --down-bg: #3a1c1c;
+    --down-text: #f28b8b;
+    --neutral-bg: #241e14;
+    --neutral-text: #b7ab95;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --focus-ring: #f2c579;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.45;
+  overflow-x: hidden;
+}
+
+.page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top, 0) 16px calc(env(safe-area-inset-bottom, 0) + 24px);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 720px) {
+  .page {
+    max-width: 560px;
+    padding-top: 32px;
+  }
+}
+
+.page-header {
+  padding: 20px 4px 8px;
+  text-align: center;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.card-eyebrow {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* --- State cards (loading / error) --- */
+
+.state-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.6s; }
+}
+
+.state-card.error {
+  color: var(--text);
+}
+
+.error-icon {
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+.error-title {
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.error-detail {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+  word-break: break-word;
+}
+
+.retry-button {
+  min-height: 44px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.retry-button:active {
+  transform: scale(0.98);
+}
+
+/* --- Rate card --- */
+
+.rate-card {
+  text-align: center;
+}
+
+.rate-value {
+  margin: 0;
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.rupee {
+  font-size: 0.6em;
+  vertical-align: 0.1em;
+  margin-right: 2px;
+  color: var(--accent-strong);
+}
+
+.change-line {
+  margin: 10px 0 0;
+  min-height: 28px;
+  display: flex;
+  justify-content: center;
+}
+
+.change-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.change-pill.up { background: var(--up-bg); color: var(--up-text); }
+.change-pill.down { background: var(--down-bg); color: var(--down-text); }
+.change-pill.neutral { background: var(--neutral-bg); color: var(--neutral-text); }
+
+.rate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.rate-tile {
+  background: var(--accent-soft);
+  border-radius: 12px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tile-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.tile-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.meta-item dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 2px;
+}
+
+.meta-item dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* --- History card / chart --- */
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.history-header .card-eyebrow {
+  margin: 0;
+}
+
+.range-toggle {
+  display: flex;
+  gap: 6px;
+  background: var(--neutral-bg);
+  padding: 4px;
+  border-radius: 999px;
+}
+
+.range-btn {
+  min-height: 32px;
+  min-width: 44px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.range-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.range-btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.chart-wrap {
+  margin-top: 12px;
+  width: 100%;
+}
+
+#chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-fill {
+  fill: var(--accent-soft);
+  opacity: 0.6;
+  stroke: none;
+}
+
+.chart-dot {
+  fill: var(--accent-strong);
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  fill: var(--text-muted);
+  font-size: 8px;
+  font-family: inherit;
+}
+
+.history-note {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* --- Source / footer --- */
+
+.source-card p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.source-card p:last-child {
+  margin-bottom: 0;
+}
+
+.source-card a {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.disclaimer {
+  color: var(--text-muted);
+  font-size: 0.8rem !important;
+}
+
+.page-footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 24px 8px 8px;
+}
+
+.page-footer a {
+  color: var(--text-muted);
+}
