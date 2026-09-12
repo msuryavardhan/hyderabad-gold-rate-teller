@@ -239,6 +239,138 @@ class TestBuildJsonPayload24k(unittest.TestCase):
         self.assertNotEqual(payload["change"]["absolute"], payload["gold_24k"]["change"]["absolute"])
 
 
+class TestBuildJsonPayloadSilver(unittest.TestCase):
+    """Silver lives in its own top-level "silver" key with its own units
+    (100g/1kg, not gold's 8g/10g) -- these tests cover that section only;
+    the 22K fields are asserted unaffected."""
+
+    def test_silver_section_populated_with_real_values(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-12T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            silver=make_rate(rate_per_gram=250.0, date="2026-09-12", purity="Silver"),
+            silver_100g=25000.0,
+            silver_1kg=250000.0,
+            change_silver=calculate_change(250.0, 255.0),
+            history_silver=[
+                {"date": "2026-09-11", "rate_per_gram": 255.0},
+                {"date": "2026-09-12", "rate_per_gram": 250.0},
+            ],
+            silver_source_url="https://www.goodreturns.in/silver-rates/hyderabad.html",
+        )
+        silver = payload["silver"]
+        self.assertEqual(silver["current"]["rate_per_gram"], 250.0)
+        self.assertEqual(silver["current"]["rate_100g"], 25000.0)
+        self.assertEqual(silver["current"]["rate_1kg"], 250000.0)
+        self.assertEqual(silver["change"]["absolute"], -5)
+        self.assertEqual(len(silver["history"]), 2)
+        self.assertEqual(silver["source_url"], "https://www.goodreturns.in/silver-rates/hyderabad.html")
+        self.assertEqual(silver["asset"], "Silver")
+        # 22K's own fields are untouched by adding silver.
+        self.assertEqual(payload["current"]["rate_per_gram"], 14015.0)
+        json.dumps(payload)  # must stay serializable
+
+    def test_silver_omitted_by_default_is_null_not_fabricated(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-12T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+        )
+        silver = payload["silver"]
+        self.assertIsNone(silver["current"])
+        self.assertIsNone(silver["change"]["absolute"])
+        self.assertEqual(silver["history"], [])
+
+    def test_silver_unavailable_preserves_prior_silver_history(self):
+        payload = build_json_payload(
+            rate=make_rate(),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-12T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            silver=None,
+            history_silver=[{"date": "2026-09-11", "rate_per_gram": 255.0}],
+        )
+        self.assertIsNone(payload["silver"]["current"])
+        self.assertEqual(payload["silver"]["history"], [{"date": "2026-09-11", "rate_per_gram": 255.0}])
+
+    def test_non_positive_silver_rate_is_rejected(self):
+        with self.assertRaises(DataExportError):
+            build_json_payload(
+                rate=make_rate(),
+                rate_8g=112120.0,
+                rate_10g=140150.0,
+                change=None,
+                updated_at="2026-09-12T09:00:00+05:30",
+                history=[],
+                source_url=SOURCE_URL,
+                silver=make_rate(rate_per_gram=0, purity="Silver"),
+                silver_100g=0,
+                silver_1kg=0,
+            )
+
+    def test_missing_silver_unit_values_rejected(self):
+        with self.assertRaises(DataExportError):
+            build_json_payload(
+                rate=make_rate(),
+                rate_8g=112120.0,
+                rate_10g=140150.0,
+                change=None,
+                updated_at="2026-09-12T09:00:00+05:30",
+                history=[],
+                source_url=SOURCE_URL,
+                silver=make_rate(rate_per_gram=250.0, purity="Silver"),
+                # silver_100g / silver_1kg omitted -- must not proceed with
+                # a partially-fabricated silver entry.
+            )
+
+    def test_silver_never_derived_from_gold(self):
+        payload = build_json_payload(
+            rate=make_rate(rate_per_gram=14015.0),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=None,
+            updated_at="2026-09-12T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            silver=make_rate(rate_per_gram=250.0, purity="Silver"),
+            silver_100g=25000.0,
+            silver_1kg=250000.0,
+        )
+        # Silver's rate must be exactly what was passed in -- nothing
+        # computed from the gold rate 14015.0.
+        self.assertEqual(payload["silver"]["current"]["rate_per_gram"], 250.0)
+        self.assertNotEqual(payload["silver"]["current"]["rate_per_gram"], payload["current"]["rate_per_gram"])
+
+    def test_gold_and_silver_changes_never_conflated(self):
+        payload = build_json_payload(
+            rate=make_rate(rate_per_gram=14015.0),
+            rate_8g=112120.0,
+            rate_10g=140150.0,
+            change=calculate_change(14015.0, 14255.0),
+            updated_at="2026-09-12T09:00:00+05:30",
+            history=[],
+            source_url=SOURCE_URL,
+            silver=make_rate(rate_per_gram=250.0, purity="Silver"),
+            silver_100g=25000.0,
+            silver_1kg=250000.0,
+            change_silver=calculate_change(250.0, 255.0),
+        )
+        self.assertEqual(payload["change"]["absolute"], -240)
+        self.assertEqual(payload["silver"]["change"]["absolute"], -5)
+
+
 class TestUpsertHistory(unittest.TestCase):
     def test_adds_new_entry_sorted(self):
         history = [{"date": "2026-09-09", "rate_per_gram": 13900.0}]

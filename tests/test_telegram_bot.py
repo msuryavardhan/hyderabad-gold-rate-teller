@@ -14,7 +14,9 @@ class TestBuildMessage22k(unittest.TestCase):
 
     def test_message_shape_and_header(self):
         message = build_message(rate_per_gram=14015, date="2026-09-11", change=None)
-        self.assertTrue(message.startswith("🪙 Hyderabad Gold Rate\n\n📅 11 September 2026\n\n"))
+        self.assertTrue(
+            message.startswith("🪙 Hyderabad Gold & Silver Rate\n\n📅 11 September 2026\n\nGOLD\n\n")
+        )
         self.assertIn("22K / 916 Gold", message)
         self.assertIn("Source: Goodreturns", message)
         self.assertIn("https://www.goodreturns.in/gold-rates/hyderabad.html", message)
@@ -112,6 +114,99 @@ class TestBuildMessage24k(unittest.TestCase):
         self.assertIn("Change: ↓ ₹240 (-1.68%)", message)
         # ...while 24K correctly reports unavailable, not a fabricated one.
         self.assertEqual(message.count("Not available"), 2)  # 24K's Previous + Change
+
+
+class TestBuildMessageSilver(unittest.TestCase):
+    def test_silver_omitted_by_default(self):
+        message = build_message(rate_per_gram=14015, date="2026-09-11", change=None)
+        # The header always says "Gold & Silver Rate" (persistent branding),
+        # but no SILVER section/block should appear when silver data wasn't
+        # provided.
+        self.assertNotIn("SILVER", message)
+        self.assertNotIn("100g:", message)
+        self.assertNotIn("1kg:", message)
+
+    def test_silver_section_included_with_real_values(self):
+        change_silver = calculate_change(today_rate=250, previous_rate=255)
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=None,
+            rate_silver_per_gram=250,
+            change_silver=change_silver,
+            previous_rate_silver=255,
+        )
+        self.assertIn("SILVER", message)
+        self.assertIn("Silver\n₹250 / gram", message)
+        self.assertIn("Previous: ₹255 / gram", message)
+        self.assertIn("Change: ↓ ₹5 (-1.96%)", message)
+        self.assertIn("100g: ₹25,000", message)  # 250 * 100
+        self.assertIn("1kg: ₹2,50,000", message)  # 250 * 1000
+        # SILVER section must come after GOLD, before the Source line.
+        self.assertLess(message.index("GOLD"), message.index("SILVER"))
+        self.assertLess(message.index("SILVER"), message.index("Source: Goodreturns"))
+
+    def test_silver_positive_change_shows_up_arrow(self):
+        change_silver = calculate_change(today_rate=255, previous_rate=250)
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=None,
+            rate_silver_per_gram=255,
+            change_silver=change_silver,
+            previous_rate_silver=250,
+        )
+        self.assertIn("Change: ↑ ₹5 (+2.00%)", message)
+
+    def test_silver_zero_change_shows_no_change(self):
+        change_silver = calculate_change(today_rate=250, previous_rate=250)
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=None,
+            rate_silver_per_gram=250,
+            change_silver=change_silver,
+            previous_rate_silver=250,
+        )
+        self.assertIn("Change: → No change", message.split("SILVER")[1])
+
+    def test_silver_missing_previous_rate_not_fabricated(self):
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=None,
+            rate_silver_per_gram=250,
+            change_silver=None,
+            previous_rate_silver=None,
+        )
+        silver_section = message.split("SILVER")[1]
+        self.assertIn("Previous: Not available", silver_section)
+        self.assertIn("Change: Not available", silver_section)
+        self.assertNotIn("↑", silver_section)
+        self.assertNotIn("↓", silver_section)
+
+    def test_gold_and_silver_never_conflated(self):
+        change_22k = calculate_change(today_rate=14015, previous_rate=14255)
+        change_silver = calculate_change(today_rate=250, previous_rate=255)
+        message = build_message(
+            rate_per_gram=14015,
+            date="2026-09-11",
+            change=change_22k,
+            previous_rate=14255,
+            rate_24k_per_gram=15289,
+            change_24k=calculate_change(15289, 15551),
+            previous_rate_24k=15551,
+            rate_silver_per_gram=250,
+            change_silver=change_silver,
+            previous_rate_silver=255,
+        )
+        self.assertIn("GOLD", message)
+        self.assertIn("SILVER", message)
+        self.assertIn("↓ ₹240 (-1.68%)", message)  # 22K
+        self.assertIn("↓ ₹262 (-1.68%)", message)  # 24K
+        self.assertIn("↓ ₹5 (-1.96%)", message)  # Silver -- distinct amount, never mixed up
+        # Silver's rate must never appear where a gold rate should be.
+        self.assertNotIn("₹250 / gram", message.split("GOLD")[1].split("SILVER")[0])
 
 
 class TestIndianRupeeFormatting(unittest.TestCase):

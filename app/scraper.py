@@ -36,8 +36,17 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 SOURCE_URL = "https://www.goodreturns.in/gold-rates/hyderabad.html"
+
+# Goodreturns publishes Hyderabad silver on its own page -- there is no
+# Hyderabad-specific silver data on the gold page above (only a generic,
+# not-city-specific "Silver" figure in the site-wide ticker, which this
+# project deliberately does not use). Verified by fetching both pages and
+# inspecting their HTML on 2026-09-12.
+SILVER_SOURCE_URL = "https://www.goodreturns.in/silver-rates/hyderabad.html"
+
 SOURCE_NAME = "Goodreturns"
 CITY = "Hyderabad"
+SILVER_ASSET = "Silver"
 REQUEST_TIMEOUT_SECONDS = 15
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -52,6 +61,23 @@ _PURITY_24K_RE = re.compile(r"\b24\s*(?:k\b|karat|carat)", re.IGNORECASE)
 
 # The "Last 10 Days" history table's date column reads like "Sep 11, 2026".
 _HISTORY_DATE_FORMAT = "%b %d, %Y"
+
+# Silver's current-rate price card label reads "Silver /g" or "Silver /kg"
+# (Goodreturns publishes both denominations directly -- no unit conversion
+# needed for *today's* rate). "/g" only matches the per-gram card: the "g"
+# in "/kg" is not preceded by "/", so this never matches the /kg card too.
+_SILVER_PER_GRAM_LABEL_RE = re.compile(r"silver.*/\s*g\b", re.IGNORECASE)
+
+# Silver's "Last 10 Days" table has no raw per-gram column -- only 10g,
+# 100g and 1kg. Each maps to an exact divisor to recover the per-gram
+# rate (a unit conversion of a real published figure, not an estimate).
+# Preferring the largest available denomination first minimizes rounding
+# error, since Goodreturns rounds each column to the nearest rupee.
+_SILVER_HISTORY_UNIT_PATTERNS: list[tuple["re.Pattern[str]", float]] = [
+    (re.compile(r"1\s*kg\b", re.IGNORECASE), 1000.0),
+    (re.compile(r"100\s*gram", re.IGNORECASE), 100.0),
+    (re.compile(r"10\s*gram", re.IGNORECASE), 10.0),
+]
 
 
 class GoldRateScraperError(Exception):
@@ -264,30 +290,13 @@ def get_hyderabad_22k_rate(
     return rate
 
 
-def _parse_history_table_for_purity(
-    html: str, purity_regex: "re.Pattern[str]", purity_label: str
-) -> list[GoldRate]:
-    """Shared implementation behind parse_hyderabad_22k_history /
-    parse_hyderabad_24k_history.
+def _locate_history_table(html: str) -> tuple:
+    """Finds Goodreturns' "Last 10 Days" history table (shared by the gold
+    and silver history parsers -- both pages use the same section/table
+    structure) and returns (tbody, header_cells, date_col).
 
-    Parses Goodreturns' own "Gold Rate in Hyderabad for Last 10 Days
-    (1 gram)" table into a list of GoldRate records (newest first, as the
-    page presents them) for whichever purity column matches purity_regex.
-
-    Does not hardcode a fixed column position -- it reads the table's
-    <thead> to find which column is the date and which matches
-    purity_regex, so a reordering of columns doesn't silently break
-    extraction. Raises GoldRateScraperError only when the table (or a
-    usable matching column within it) cannot be found at all, or when none
-    of its rows can be parsed -- i.e. when the page structure has genuinely
-    changed. A row with an unparseable date or price is skipped with a
-    warning rather than failing the whole scrape, since Goodreturns
-    occasionally leaves a row blank; skipping is not fabrication, it is
-    reporting only what was actually, unambiguously present.
-
-    Returns however many valid rows exist (0 rows never happens without
-    raising) -- if Goodreturns shows fewer than 10 days, fewer rows are
-    returned. Callers must not pad this out to look like a full 10 days.
+    Raises GoldRateScraperError if the section/table can't be found at
+    all -- i.e. the page structure has genuinely changed.
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -315,6 +324,36 @@ def _parse_history_table_for_purity(
 
     header_cells = [th.get_text(strip=True) for th in thead.find_all("th")]
     date_col = next((i for i, text in enumerate(header_cells) if "date" in text.lower()), 0)
+    return tbody, header_cells, date_col
+
+
+def _parse_history_table_for_purity(
+    html: str, purity_regex: "re.Pattern[str]", purity_label: str
+) -> list[GoldRate]:
+    """Shared implementation behind parse_hyderabad_22k_history /
+    parse_hyderabad_24k_history.
+
+    Parses Goodreturns' own "Gold Rate in Hyderabad for Last 10 Days
+    (1 gram)" table into a list of GoldRate records (newest first, as the
+    page presents them) for whichever purity column matches purity_regex.
+
+    Does not hardcode a fixed column position -- it reads the table's
+    <thead> to find which column is the date and which matches
+    purity_regex, so a reordering of columns doesn't silently break
+    extraction. Raises GoldRateScraperError only when the table (or a
+    usable matching column within it) cannot be found at all, or when none
+    of its rows can be parsed -- i.e. when the page structure has genuinely
+    changed. A row with an unparseable date or price is skipped with a
+    warning rather than failing the whole scrape, since Goodreturns
+    occasionally leaves a row blank; skipping is not fabrication, it is
+    reporting only what was actually, unambiguously present.
+
+    Returns however many valid rows exist (0 rows never happens without
+    raising) -- if Goodreturns shows fewer than 10 days, fewer rows are
+    returned. Callers must not pad this out to look like a full 10 days.
+    """
+    tbody, header_cells, date_col = _locate_history_table(html)
+
     purity_col = next(
         (i for i, text in enumerate(header_cells) if purity_regex.search(text)), None
     )
@@ -381,6 +420,119 @@ def parse_hyderabad_24k_history(html: str) -> list[GoldRate]:
     to the 24K column instead.
     """
     return _parse_history_table_for_purity(html, _PURITY_24K_RE, "24K")
+
+
+def parse_hyderabad_silver(html: str) -> GoldRate:
+    """Parse the Goodreturns Hyderabad *silver* page HTML (a different URL
+    from the gold page -- see SILVER_SOURCE_URL) and extract the current
+    per-gram silver rate.
+
+    Reuses the exact same card-scanning helper as the gold purities: it
+    scans every price card and only accepts the one whose label matches
+    "Silver /g" (not "Silver /kg", which is a separate card on the same
+    page). Raises GoldRateScraperError rather than fabricating a value or
+    deriving one from a gold rate.
+    """
+    return _parse_current_rate_for_purity(html, _SILVER_PER_GRAM_LABEL_RE, SILVER_ASSET)
+
+
+def parse_hyderabad_silver_history(html: str) -> list[GoldRate]:
+    """Parses the silver page's "Last 10 Days" table.
+
+    Unlike the gold tables, this one has no raw per-gram column -- only
+    10 gram / 100 gram / 1 Kg. Whichever of those is found (preferring the
+    largest denomination available, for the smallest rounding error) is
+    divided by its exact unit multiplier to recover a per-gram rate. This
+    is a unit conversion of a real, already-published figure -- not an
+    estimate, not an interpolation, and not derived from any gold value.
+
+    Raises GoldRateScraperError only when the table can't be found at all,
+    when none of the known unit columns are present, or when no row can be
+    parsed -- i.e. when the page structure has genuinely changed.
+    """
+    tbody, header_cells, date_col = _locate_history_table(html)
+
+    value_col = None
+    divisor = None
+    for pattern, candidate_divisor in _SILVER_HISTORY_UNIT_PATTERNS:
+        match_index = next((i for i, text in enumerate(header_cells) if pattern.search(text)), None)
+        if match_index is not None:
+            value_col = match_index
+            divisor = candidate_divisor
+            break
+
+    if value_col is None:
+        raise GoldRateScraperError(
+            "Silver historical rate table has no recognised 10g/100g/1kg "
+            "column -- Goodreturns' HTML structure may have changed."
+        )
+
+    records: list[GoldRate] = []
+    for row in tbody.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) <= max(date_col, value_col):
+            continue  # malformed row -- skip rather than guess column positions
+
+        date_text = cells[date_col].get_text(strip=True)
+        try:
+            row_date = datetime.strptime(date_text, _HISTORY_DATE_FORMAT).date().isoformat()
+        except ValueError:
+            logger.warning("Skipping silver historical row with unparseable date %r", date_text)
+            continue
+
+        value_cell = cells[value_col]
+        for span in value_cell.find_all("span"):
+            span.extract()
+        price_text = value_cell.get_text(strip=True)
+        try:
+            unit_price = parse_price_string(price_text)
+        except ValueError:
+            logger.warning(
+                "Skipping silver historical row for %s with unparseable price %r", row_date, price_text
+            )
+            continue
+
+        records.append(
+            GoldRate(
+                city=CITY,
+                purity=SILVER_ASSET,
+                rate_per_gram=round(unit_price / divisor, 4),
+                date=row_date,
+                source=SOURCE_NAME,
+            )
+        )
+
+    if not records:
+        raise GoldRateScraperError(
+            "Silver historical rate table was found but no valid rows could "
+            "be parsed from it -- Goodreturns' HTML structure may have changed."
+        )
+
+    return records
+
+
+def get_hyderabad_silver_with_history(
+    url: str = SILVER_SOURCE_URL, timeout: int = REQUEST_TIMEOUT_SECONDS
+) -> tuple[GoldRate, list[GoldRate]]:
+    """Fetches the Hyderabad silver page once and returns both today's
+    rate and its "Last 10 Days" history.
+
+    This is a separate fetch from the gold page (get_hyderabad_gold_rates)
+    since Goodreturns publishes Hyderabad silver on its own URL. Raises
+    GoldRateScraperError if either the current rate or the historical
+    table can't be confidently parsed.
+    """
+    logger.info("Fetching %s ...", url)
+    html = fetch_page(url, timeout=timeout)
+    rate = parse_hyderabad_silver(html)
+    history = parse_hyderabad_silver_history(html)
+    logger.info(
+        "Hyderabad silver rate found: ₹%s/g (as of %s); %d historical row(s) parsed",
+        f"{rate.rate_per_gram:,.2f}",
+        rate.date,
+        len(history),
+    )
+    return rate, history
 
 
 def get_hyderabad_22k_with_history(
@@ -472,3 +624,9 @@ if __name__ == "__main__":
         print(f"  {len(history)} historical row(s):")
         for entry in history:
             print("   ", entry.date, entry.rate_per_gram)
+
+    silver_rate, silver_history = get_hyderabad_silver_with_history()
+    print("Silver:", silver_rate.as_dict())
+    print(f"  {len(silver_history)} historical row(s):")
+    for entry in silver_history:
+        print("   ", entry.date, entry.rate_per_gram)

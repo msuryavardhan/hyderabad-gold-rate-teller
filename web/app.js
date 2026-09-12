@@ -1,15 +1,17 @@
 /*
- * Hyderabad Gold Rate Teller — dashboard frontend.
+ * Hyderabad Gold & Silver Rate Teller — dashboard frontend.
  *
  * Plain vanilla JS. No frameworks, no chart library, no CDN dependency:
- * the history chart is a small hand-drawn SVG line, which keeps the page
+ * the history charts are small hand-drawn SVG lines, which keeps the page
  * fast-loading and avoids pulling in a dependency just for a line chart.
- * The same chart/tooltip logic is reused for both the 22K and 24K charts
- * via a small "chart context" object (see charts.k22 / charts.k24 below).
+ * The same chart/tooltip logic is reused for the Gold chart (which
+ * switches between 22K/24K history via a purity toggle) and the Silver
+ * chart, via a small "chart context" object (see charts.gold / charts.silver).
  *
- * All gold-rate data comes from ./data/gold_rates.json, produced by the
- * Python pipeline (see app/data_export.py and scripts/update_gold_rate_data.py).
- * This script never talks to Goodreturns directly.
+ * All rate data comes from ./data/gold_rates.json, produced by the Python
+ * pipeline (see app/data_export.py and scripts/update_gold_rate_data.py).
+ * This script never talks to Goodreturns directly, and never derives one
+ * asset's numbers from another's.
  */
 
 (function () {
@@ -19,17 +21,19 @@
 
   var state = {
     payload: null,
-    range: 7,
+    goldPurity: "22K", // which purity the Gold chart currently shows
+    goldRange: 7,
+    silverRange: 7,
   };
 
   var els = {};
 
   // Two independent chart contexts sharing the same rendering/tooltip
   // logic. Each tracks its own currently-plotted points and open-tooltip
-  // state, so hovering one chart never affects the other.
+  // state, so interacting with one chart never affects the other.
   var charts = {
-    k22: { key: "k22", label: "22K Gold Rate", points: [], activeIndex: null },
-    k24: { key: "k24", label: "24K Gold Rate", points: [], activeIndex: null },
+    gold: { key: "gold", label: "22K Gold Rate", points: [], activeIndex: null },
+    silver: { key: "silver", label: "Silver Rate", points: [], activeIndex: null },
   };
 
   function cacheElements() {
@@ -39,37 +43,66 @@
     els.retryButton = document.getElementById("retry-button");
     els.content = document.getElementById("content");
 
+    // Gold cards
+    els.card22k = document.getElementById("card-22k");
+    els.card24k = document.getElementById("card-24k");
     els.ratePerGram = document.getElementById("rate-per-gram");
     els.rate8g = document.getElementById("rate-8g");
     els.rate10g = document.getElementById("rate-10g");
     els.changeLine = document.getElementById("change-line");
-    els.rateDate = document.getElementById("rate-date");
-    els.rateUpdated = document.getElementById("rate-updated");
-    els.sourceLink = document.getElementById("source-link");
-
+    els.previous22k = document.getElementById("previous-22k");
     els.rate24kValueWrap = document.getElementById("rate-24k-value-wrap");
     els.rupee24k = document.getElementById("rupee-24k");
     els.rate24kPerGram = document.getElementById("rate-24k-per-gram");
     els.rate24k8g = document.getElementById("rate-24k-8g");
     els.rate24k10g = document.getElementById("rate-24k-10g");
     els.change24kLine = document.getElementById("change-24k-line");
+    els.previous24k = document.getElementById("previous-24k");
+    els.rateDate = document.getElementById("rate-date");
+    els.rateUpdated = document.getElementById("rate-updated");
+    els.sourceLinkGold = document.getElementById("source-link-gold");
+    els.sourceLinkSilver = document.getElementById("source-link-silver");
 
-    els.rangeButtons = Array.prototype.slice.call(document.querySelectorAll(".range-btn"));
-    els.recentTableBody = document.getElementById("recent-table-body");
+    // Silver card
+    els.silverValueWrap = document.getElementById("silver-value-wrap");
+    els.rupeeSilver = document.getElementById("rupee-silver");
+    els.silverRatePerGram = document.getElementById("silver-rate-per-gram");
+    els.silverRate100g = document.getElementById("silver-rate-100g");
+    els.silverRate1kg = document.getElementById("silver-rate-1kg");
+    els.silverChangeLine = document.getElementById("silver-change-line");
+    els.previousSilver = document.getElementById("previous-silver");
+    els.silverDate = document.getElementById("silver-date");
 
-    charts.k22.svg = document.getElementById("chart");
-    charts.k22.wrap = document.getElementById("chart-wrap");
-    charts.k22.historyNote = document.getElementById("history-note");
-    charts.k22.tooltip = document.getElementById("chart-tooltip");
-    charts.k22.tooltipDate = document.getElementById("tooltip-date");
-    charts.k22.tooltipValue = document.getElementById("tooltip-value");
+    // Purity + range toggles
+    els.purityButtons = Array.prototype.slice.call(document.querySelectorAll(".purity-btn"));
+    els.rangeButtonsGold = Array.prototype.slice.call(
+      document.querySelectorAll('.range-btn[data-range-group="gold"]')
+    );
+    els.rangeButtonsSilver = Array.prototype.slice.call(
+      document.querySelectorAll('.range-btn[data-range-group="silver"]')
+    );
+    els.goldChartPurityLabel = document.getElementById("gold-chart-purity-label");
 
-    charts.k24.svg = document.getElementById("chart-24k");
-    charts.k24.wrap = document.getElementById("chart-wrap-24k");
-    charts.k24.historyNote = document.getElementById("history-note-24k");
-    charts.k24.tooltip = document.getElementById("chart-tooltip-24k");
-    charts.k24.tooltipDate = document.getElementById("tooltip-24k-date");
-    charts.k24.tooltipValue = document.getElementById("tooltip-24k-value");
+    // Recent-rates tables
+    els.recentGoldTableBody = document.getElementById("recent-gold-table-body");
+    els.recentSilverTableBody = document.getElementById("recent-silver-table-body");
+
+    // Gold chart context
+    charts.gold.svg = document.getElementById("gold-chart");
+    charts.gold.wrap = document.getElementById("gold-chart-wrap");
+    charts.gold.historyNote = document.getElementById("gold-history-note");
+    charts.gold.tooltip = document.getElementById("gold-chart-tooltip");
+    charts.gold.tooltipDate = document.getElementById("gold-tooltip-date");
+    charts.gold.tooltipValue = document.getElementById("gold-tooltip-value");
+    charts.gold.tooltipLabelEl = document.getElementById("gold-tooltip-label");
+
+    // Silver chart context
+    charts.silver.svg = document.getElementById("silver-chart");
+    charts.silver.wrap = document.getElementById("silver-chart-wrap");
+    charts.silver.historyNote = document.getElementById("silver-history-note");
+    charts.silver.tooltip = document.getElementById("silver-chart-tooltip");
+    charts.silver.tooltipDate = document.getElementById("silver-tooltip-date");
+    charts.silver.tooltipValue = document.getElementById("silver-tooltip-value");
   }
 
   function showState(name) {
@@ -131,6 +164,25 @@
     return datePart + ", " + timePart;
   }
 
+  // Finds the most recent rate strictly before `todayDate` in a history
+  // array -- the real, already-published previous value. Returns null
+  // (never a guess) when there's nothing earlier.
+  function findPreviousRate(history, todayDate) {
+    if (!Array.isArray(history) || !todayDate) return null;
+    var candidates = history.filter(function (h) {
+      return h && h.date && h.date < todayDate;
+    });
+    if (!candidates.length) return null;
+    candidates.sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+    return candidates[0].rate_per_gram;
+  }
+
+  function setPreviousText(el, rate) {
+    el.textContent = rate === null || rate === undefined ? "Not available" : "₹" + formatInr(rate);
+  }
+
   function renderChangeInto(targetEl, change) {
     targetEl.innerHTML = "";
     var absolute = change && change.absolute;
@@ -141,6 +193,14 @@
       pill.className = "change-pill neutral";
       pill.textContent = "Change: Not available";
       targetEl.appendChild(pill);
+      return;
+    }
+
+    if (absolute === 0) {
+      var neutralPill = document.createElement("span");
+      neutralPill.className = "change-pill neutral";
+      neutralPill.textContent = "→ No change";
+      targetEl.appendChild(neutralPill);
       return;
     }
 
@@ -161,11 +221,10 @@
     els.rate10g.textContent = "₹" + formatInr(current.rate_10g);
     els.rateDate.textContent = formatDisplayDate(payload.date);
     els.rateUpdated.textContent = formatUpdatedAt(payload.updated_at);
-    if (payload.source_url) {
-      els.sourceLink.href = payload.source_url;
-    }
+    if (payload.source_url) els.sourceLinkGold.href = payload.source_url;
 
     renderChangeInto(els.changeLine, payload.change);
+    setPreviousText(els.previous22k, findPreviousRate(payload.history, payload.date));
   }
 
   function renderCurrent24k(payload) {
@@ -179,6 +238,7 @@
       els.rate24k8g.textContent = "--";
       els.rate24k10g.textContent = "--";
       renderChangeInto(els.change24kLine, null);
+      setPreviousText(els.previous24k, null);
       return;
     }
 
@@ -188,6 +248,35 @@
     els.rate24k8g.textContent = "₹" + formatInr(current.rate_8g);
     els.rate24k10g.textContent = "₹" + formatInr(current.rate_10g);
     renderChangeInto(els.change24kLine, gold24k.change);
+    setPreviousText(els.previous24k, findPreviousRate(gold24k.history, gold24k.date));
+  }
+
+  function renderCurrentSilver(payload) {
+    var silver = payload.silver || {};
+    var current = silver.current;
+
+    if (silver.source_url) els.sourceLinkSilver.href = silver.source_url;
+
+    if (!current) {
+      els.silverValueWrap.classList.add("unavailable");
+      els.rupeeSilver.hidden = true;
+      els.silverRatePerGram.textContent = "Not available";
+      els.silverRate100g.textContent = "--";
+      els.silverRate1kg.textContent = "--";
+      els.silverDate.textContent = "--";
+      renderChangeInto(els.silverChangeLine, null);
+      setPreviousText(els.previousSilver, null);
+      return;
+    }
+
+    els.silverValueWrap.classList.remove("unavailable");
+    els.rupeeSilver.hidden = false;
+    els.silverRatePerGram.textContent = formatInr(current.rate_per_gram);
+    els.silverRate100g.textContent = "₹" + formatInr(current.rate_100g);
+    els.silverRate1kg.textContent = "₹" + formatInr(current.rate_1kg);
+    els.silverDate.textContent = formatDisplayDate(silver.date);
+    renderChangeInto(els.silverChangeLine, silver.change);
+    setPreviousText(els.previousSilver, findPreviousRate(silver.history, silver.date));
   }
 
   function daysBetween(isoDateA, isoDateB) {
@@ -211,7 +300,7 @@
   }
 
   // Looks up the rate for an exact date in a history array, or null if
-  // that purity has no record for that date -- never estimated/interpolated.
+  // that asset has no record for that date -- never estimated.
   function findRateForDate(history, isoDate) {
     if (!Array.isArray(history)) return null;
     for (var i = 0; i < history.length; i++) {
@@ -220,16 +309,16 @@
     return null;
   }
 
-  function renderRecentRates(payload) {
+  function renderRecentGoldRates(payload) {
     var history22k = Array.isArray(payload.history) ? payload.history.slice() : [];
     var history24k = (payload.gold_24k && Array.isArray(payload.gold_24k.history)) ? payload.gold_24k.history : [];
 
-    els.recentTableBody.innerHTML = "";
+    els.recentGoldTableBody.innerHTML = "";
     if (!history22k.length) return;
 
-    // 22K is the required, always-present purity, so its dates form the
+    // 22K is the required, always-present rate, so its dates form the
     // backbone of "recent" rows; 24K is looked up per date and marked
-    // "Not available" rather than estimated if that date has no 24K entry.
+    // "Not available" rather than estimated if that date has no entry.
     var sorted22k = history22k.slice().sort(function (a, b) {
       return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; // newest first
     });
@@ -258,7 +347,36 @@
       }
       tr.appendChild(cell24k);
 
-      els.recentTableBody.appendChild(tr);
+      els.recentGoldTableBody.appendChild(tr);
+    });
+  }
+
+  function renderRecentSilverRates(payload) {
+    var silver = payload.silver || {};
+    var history = Array.isArray(silver.history) ? silver.history.slice() : [];
+
+    els.recentSilverTableBody.innerHTML = "";
+    if (!history.length) return;
+
+    var sorted = history.slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; // newest first
+    });
+    var recent = sorted.slice(0, 4);
+    var todayDate = silver.date || payload.date;
+
+    recent.forEach(function (entry) {
+      var tr = document.createElement("tr");
+
+      var dateCell = document.createElement("td");
+      dateCell.textContent = relativeLabel(entry.date, todayDate);
+      tr.appendChild(dateCell);
+
+      var valueCell = document.createElement("td");
+      valueCell.className = "value-silver";
+      valueCell.textContent = "₹" + formatInr(entry.rate_per_gram);
+      tr.appendChild(valueCell);
+
+      els.recentSilverTableBody.appendChild(tr);
     });
   }
 
@@ -271,8 +389,8 @@
   }
 
   // --- Chart tooltip (works for both mouse hover and touch tap) ---
-  // All functions below take a chart context (charts.k22 or charts.k24)
-  // so the exact same logic drives both charts independently.
+  // All functions below take a chart context (charts.gold or
+  // charts.silver) so the exact same logic drives both charts independently.
 
   function hideTooltip(ctx) {
     if (!ctx.tooltip) return;
@@ -283,8 +401,8 @@
   }
 
   function hideAllTooltips() {
-    hideTooltip(charts.k22);
-    hideTooltip(charts.k24);
+    hideTooltip(charts.gold);
+    hideTooltip(charts.silver);
   }
 
   function highlightPoint(ctx, index) {
@@ -336,9 +454,9 @@
     highlightPoint(ctx, index);
   }
 
-  function renderChartInto(ctx, historyData) {
+  function renderChartInto(ctx, historyData, range) {
     hideTooltip(ctx);
-    var points = historyForRange(historyData, state.range);
+    var points = historyForRange(historyData, range);
     ctx.points = points;
     var svg = ctx.svg;
 
@@ -492,27 +610,84 @@
     });
   }
 
-  function renderCharts() {
+  function goldHistoryForCurrentPurity(payload) {
+    if (state.goldPurity === "24K") {
+      return (payload.gold_24k && payload.gold_24k.history) || [];
+    }
+    return payload.history || [];
+  }
+
+  function renderGoldChart() {
     var payload = state.payload;
     if (!payload) return;
-    renderChartInto(charts.k22, payload.history);
-    renderChartInto(charts.k24, (payload.gold_24k && payload.gold_24k.history) || []);
+    renderChartInto(charts.gold, goldHistoryForCurrentPurity(payload), state.goldRange);
   }
 
-  function setRange(days) {
-    state.range = days;
-    els.rangeButtons.forEach(function (btn) {
-      var active = Number(btn.dataset.range) === days;
-      btn.setAttribute("aria-pressed", active ? "true" : "false");
+  function renderSilverChart() {
+    var payload = state.payload;
+    if (!payload) return;
+    renderChartInto(charts.silver, (payload.silver && payload.silver.history) || [], state.silverRange);
+  }
+
+  function setGoldPurity(purity) {
+    state.goldPurity = purity;
+    var is24k = purity === "24K";
+
+    els.purityButtons.forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.dataset.purity === purity ? "true" : "false");
     });
-    renderCharts();
+    els.card22k.setAttribute("aria-pressed", is24k ? "false" : "true");
+    els.card24k.setAttribute("aria-pressed", is24k ? "true" : "false");
+
+    charts.gold.wrap.classList.toggle("purity-24k", is24k);
+    charts.gold.tooltip.classList.toggle("purity-24k", is24k);
+    charts.gold.label = is24k ? "24K Gold Rate" : "22K Gold Rate";
+    if (charts.gold.tooltipLabelEl) charts.gold.tooltipLabelEl.textContent = charts.gold.label;
+    els.goldChartPurityLabel.textContent = is24k ? "24K" : "22K / 916";
+
+    renderGoldChart();
   }
 
-  function attachRangeButtons() {
-    els.rangeButtons.forEach(function (btn) {
+  function setGoldRange(days) {
+    state.goldRange = days;
+    els.rangeButtonsGold.forEach(function (btn) {
+      btn.setAttribute("aria-pressed", Number(btn.dataset.range) === days ? "true" : "false");
+    });
+    renderGoldChart();
+  }
+
+  function setSilverRange(days) {
+    state.silverRange = days;
+    els.rangeButtonsSilver.forEach(function (btn) {
+      btn.setAttribute("aria-pressed", Number(btn.dataset.range) === days ? "true" : "false");
+    });
+    renderSilverChart();
+  }
+
+  function attachControls() {
+    els.purityButtons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        setRange(Number(btn.dataset.range));
+        setGoldPurity(btn.dataset.purity);
       });
+    });
+    els.rangeButtonsGold.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setGoldRange(Number(btn.dataset.range));
+      });
+    });
+    els.rangeButtonsSilver.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setSilverRange(Number(btn.dataset.range));
+      });
+    });
+    // The 22K/24K cards double as purity selectors -- clicking one also
+    // switches the Gold chart below to that purity (they are real
+    // <button> elements, so this is also fully keyboard-accessible).
+    els.card22k.addEventListener("click", function () {
+      setGoldPurity("22K");
+    });
+    els.card24k.addEventListener("click", function () {
+      setGoldPurity("24K");
     });
   }
 
@@ -536,8 +711,11 @@
         state.payload = payload;
         renderCurrent(payload);
         renderCurrent24k(payload);
-        renderCharts();
-        renderRecentRates(payload);
+        renderCurrentSilver(payload);
+        renderGoldChart();
+        renderSilverChart();
+        renderRecentGoldRates(payload);
+        renderRecentSilverRates(payload);
         showState("content");
       })
       .catch(function (err) {
@@ -548,16 +726,16 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     cacheElements();
-    attachRangeButtons();
+    attachControls();
     els.retryButton.addEventListener("click", load);
 
     // Dismiss any open tooltip on a tap/click outside both charts, and on
     // resize (a tooltip's position is computed from live element rects,
     // which a resize would make stale until the next hover/tap).
     document.addEventListener("click", function (e) {
-      var insideK22 = charts.k22.wrap && charts.k22.wrap.contains(e.target);
-      var insideK24 = charts.k24.wrap && charts.k24.wrap.contains(e.target);
-      if (!insideK22 && !insideK24) {
+      var insideGold = charts.gold.wrap && charts.gold.wrap.contains(e.target);
+      var insideSilver = charts.silver.wrap && charts.silver.wrap.contains(e.target);
+      if (!insideGold && !insideSilver) {
         hideAllTooltips();
       }
     });

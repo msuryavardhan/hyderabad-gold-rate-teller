@@ -1,24 +1,31 @@
-# Hyderabad Gold Rate Teller
+# Hyderabad Gold & Silver Rate Teller
 
-A small, honest pipeline that fetches the daily **22K and 24K gold rates
-for Hyderabad, India** from
-[Goodreturns](https://www.goodreturns.in/gold-rates/hyderabad.html), stores
-history for both purities, calculates day-over-day change independently
-for each, and publishes it two ways:
+A small, honest pipeline that fetches the daily **22K and 24K gold rates,
+and the silver rate, for Hyderabad, India** from Goodreturns
+([gold](https://www.goodreturns.in/gold-rates/hyderabad.html) and
+[silver](https://www.goodreturns.in/silver-rates/hyderabad.html) are two
+separate pages on the same site), stores history for all three
+independently, calculates day-over-day change for each on its own terms
+(24K is never derived from 22K; silver is never derived from gold), and
+publishes it two ways:
 
-- **Telegram** — a daily message to your phone.
+- **Telegram** — a daily message to your phone with Gold (22K + 24K) and
+  Silver.
 - **A mobile-first website** — hosted free on GitHub Pages, updated
-  automatically every day, no manual steps once set up.
+  automatically every day, no manual steps once set up. Gold and Silver
+  are two clearly separated sections on the same homepage, reachable from
+  a sticky top nav (Home / Gold / Silver / About).
 
 **Source: Goodreturns only.** This project intentionally does not use IBJA,
-MCX, Malabar Gold, Tanishq, Kalyan, Joyalukkas, or generic "India gold rate"
-sources. It is not an official government or IBJA rate — it is Goodreturns'
-published retail gold rate for Hyderabad.
+MCX, Malabar Gold, Tanishq, Kalyan, Joyalukkas, or generic "India gold/silver
+rate" sources. None of this is an official government, IBJA, or MCX rate —
+it is Goodreturns' published Hyderabad retail rates.
 
-If Goodreturns is unreachable or its page structure changes enough that the
-22K rate can't be confidently identified, the pipeline **fails loudly and
-changes nothing** — it never invents a rate, and it never overwrites the
-last known-good published data with a guess.
+Gold and Silver are fetched and validated independently: if one fails on a
+given day (site down, HTML changed) the other still publishes fresh, and
+the failed one's last known-good rate/history is carried forward untouched
+rather than being blanked out or fabricated. If *both* fail, nothing is
+written at all — the previously published data stays exactly as it was.
 
 ## Project overview / architecture
 
@@ -190,21 +197,25 @@ Then open **http://localhost:8000** in a browser. Run
 python -m unittest discover -s tests -v
 ```
 
-96 tests, all passing, using Python's built-in `unittest` (no extra test
+145 tests, all passing, using Python's built-in `unittest` (no extra test
 framework installed). Covers:
 
 - Parsing the real, saved Goodreturns HTML and price-string edge cases,
-  for **both 22K and 24K** independently (each has its own price card and
-  its own column in the "Last 10 Days" table -- column position is found
-  via the table header, not hardcoded)
-- 8g/10g calculation and change % / absolute calculation, incl. "no
-  previous rate", for both purities, with an explicit check that 22K and
-  24K changes are never conflated
-- Missing 22K/24K card / malformed price / completely invalid HTML
-- 24K unavailable-but-22K-still-succeeds handling (never fabricates a 24K
-  value, never fails the whole scrape over it)
-- Telegram message formatting, including the additive 24K section
-- **JSON export**: valid payload shape for both purities, non-positive/
+  for **22K, 24K, and Silver** independently (each has its own price card
+  and its own column in its "Last 10 Days" table -- column position is
+  found via the table header, not hardcoded). Silver's history table has
+  no raw per-gram column, only 10g/100g/1kg -- the per-gram rate is
+  recovered by exact division of a real published figure, never estimated
+  and never derived from gold.
+- Unit-quantity calculation (8g/10g for gold, 100g/1kg for silver) and
+  change % / absolute calculation, incl. "no previous rate", for each
+  asset independently, with explicit checks that 22K/24K/Silver changes
+  are never conflated with each other.
+- Missing card / malformed price / completely invalid HTML, for each asset.
+- Independent-failure handling: 24K or Silver being unavailable never
+  fails the whole scrape, and never fabricates a value for the missing one.
+- Telegram message formatting for Gold (22K + 24K) and Silver sections.
+- **JSON export**: valid payload shape for all three assets, non-positive/
   invalid rate rejected (prevents ever publishing bad data), history
   upsert/sort/trim/merge (never deletes an already-collected date),
   finding the correct previous rate for change calculation, corrupt/

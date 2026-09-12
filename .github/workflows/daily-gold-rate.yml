@@ -34,13 +34,15 @@ jobs:
       - name: Run existing test suite
         run: python -m unittest discover -s tests -v
 
-      # This step fetches Goodreturns, validates the 22K Hyderabad rate,
-      # and writes web/data/gold_rates.json ONLY on success. If the site is
-      # unreachable or the rate can't be confidently extracted, the script
-      # exits non-zero, this step fails, and every step below is skipped --
-      # so nothing is ever committed on a failed/invalid scrape, and the
-      # last known good data file stays exactly as it was.
-      - name: Fetch Hyderabad 22K gold rate and update public data
+      # This step fetches Goodreturns' Hyderabad gold page (22K + 24K) and
+      # its separate silver page, validates each independently, and writes
+      # web/data/gold_rates.json. Gold and Silver are handled independently
+      # inside the script: if one fails, the other still publishes fresh
+      # and the failed one's last known-good data is preserved untouched.
+      # If BOTH fail, the script exits non-zero, this step fails, and every
+      # step below is skipped -- so nothing is ever committed on a total
+      # scrape failure, and the last known good data file stays as it was.
+      - name: Fetch Hyderabad gold + silver rates and update public data
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -54,6 +56,6 @@ jobs:
             echo "No changes to web/data/gold_rates.json; nothing to commit."
           else
             git add web/data/gold_rates.json
-            git commit -m "Update Hyderabad 22K gold rate data [skip ci]"
+            git commit -m "Update Hyderabad gold + silver rate data [skip ci]"
             git push
           fi

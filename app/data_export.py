@@ -137,6 +137,22 @@ def upsert_history(
     return merge_history_records(history, [{"date": date, "rate_per_gram": rate_per_gram}], max_entries)
 
 
+def _validate_current(rate: GoldRate, unit_a: Optional[float], unit_b: Optional[float], label: str) -> None:
+    if rate.rate_per_gram is None or rate.rate_per_gram <= 0:
+        raise DataExportError(f"Refusing to publish a non-positive {label} rate: {rate.rate_per_gram!r}")
+    if unit_a is None or unit_b is None or unit_a <= 0 or unit_b <= 0:
+        raise DataExportError(f"Refusing to publish non-positive {label} unit-quantity values")
+    if not _DATE_RE.match(rate.date or ""):
+        raise DataExportError(f"Refusing to publish an invalid {label} date: {rate.date!r}")
+
+
+def _change_dict(change: Optional[RateChange]) -> dict:
+    return {
+        "absolute": change.absolute if change is not None else None,
+        "percentage": change.percentage if change is not None else None,
+    }
+
+
 def build_json_payload(
     rate: GoldRate,
     rate_8g: float,
@@ -150,6 +166,12 @@ def build_json_payload(
     rate_24k_10g: Optional[float] = None,
     change_24k: Optional[RateChange] = None,
     history_24k: Optional[list[dict]] = None,
+    silver: Optional[GoldRate] = None,
+    silver_100g: Optional[float] = None,
+    silver_1kg: Optional[float] = None,
+    change_silver: Optional[RateChange] = None,
+    history_silver: Optional[list[dict]] = None,
+    silver_source_url: Optional[str] = None,
 ) -> dict:
     """Shapes the public JSON payload. Raises DataExportError instead of
     returning a payload if the inputs look invalid -- this is the guard
@@ -157,39 +179,42 @@ def build_json_payload(
     good data file.
 
     All top-level fields (source, city, purity, current, change, date,
-    history, ...) describe the 22K rate exactly as before -- unchanged,
-    for backward compatibility with anything already reading this file.
-    24K data is added under a new "gold_24k" key with the same current/
-    change/history shape, so it's easy to find without disturbing the
-    existing structure.
+    history, ...) describe the 22K gold rate exactly as before --
+    unchanged, for backward compatibility with anything already reading
+    this file. 24K gold is added under "gold_24k"; silver is added under
+    a separate top-level "silver" key (a different asset, not a gold
+    purity), with the same current/change/history shape but using
+    silver's own units (rate_100g / rate_1kg instead of 8g/10g).
 
-    rate_24k is optional: when it's None (24K was unavailable on this
-    run -- e.g. its price card or table column couldn't be parsed),
-    "gold_24k.current" and "gold_24k.change" are emitted as null rather
-    than fabricated, while "gold_24k.history" (whatever was already
-    collected, possibly extended by history_24k) is preserved untouched.
+    rate_24k and silver are each optional and independent: when either is
+    None (unavailable this run -- its own page/card/column couldn't be
+    parsed, or its whole fetch failed), that section's "current"/"change"
+    are emitted as null rather than fabricated or derived from the other
+    asset, while its "history" (whatever was already collected, possibly
+    extended by history_24k/history_silver) is preserved untouched. A
+    22K failure is the only one that prevents this function from being
+    called at all with real "today" data -- but even that case is handled
+    by the caller refusing to call build_json_payload, not by this
+    function fabricating a stand-in.
     """
-    if rate.rate_per_gram is None or rate.rate_per_gram <= 0:
-        raise DataExportError(f"Refusing to publish a non-positive rate: {rate.rate_per_gram!r}")
-    if rate_8g <= 0 or rate_10g <= 0:
-        raise DataExportError("Refusing to publish non-positive 8g/10g values")
-    if not _DATE_RE.match(rate.date or ""):
-        raise DataExportError(f"Refusing to publish an invalid date: {rate.date!r}")
+    _validate_current(rate, rate_8g, rate_10g, "22K")
 
     gold_24k_current = None
     if rate_24k is not None:
-        if rate_24k.rate_per_gram is None or rate_24k.rate_per_gram <= 0:
-            raise DataExportError(
-                f"Refusing to publish a non-positive 24K rate: {rate_24k.rate_per_gram!r}"
-            )
-        if rate_24k_8g is None or rate_24k_10g is None or rate_24k_8g <= 0 or rate_24k_10g <= 0:
-            raise DataExportError("Refusing to publish non-positive 24K 8g/10g values")
-        if not _DATE_RE.match(rate_24k.date or ""):
-            raise DataExportError(f"Refusing to publish an invalid 24K date: {rate_24k.date!r}")
+        _validate_current(rate_24k, rate_24k_8g, rate_24k_10g, "24K")
         gold_24k_current = {
             "rate_per_gram": round(rate_24k.rate_per_gram, 2),
             "rate_8g": round(rate_24k_8g, 2),
             "rate_10g": round(rate_24k_10g, 2),
+        }
+
+    silver_current = None
+    if silver is not None:
+        _validate_current(silver, silver_100g, silver_1kg, "silver")
+        silver_current = {
+            "rate_per_gram": round(silver.rate_per_gram, 2),
+            "rate_100g": round(silver_100g, 2),
+            "rate_1kg": round(silver_1kg, 2),
         }
 
     return {
@@ -202,21 +227,26 @@ def build_json_payload(
             "rate_8g": round(rate_8g, 2),
             "rate_10g": round(rate_10g, 2),
         },
-        "change": {
-            "absolute": change.absolute if change is not None else None,
-            "percentage": change.percentage if change is not None else None,
-        },
+        "change": _change_dict(change),
         "date": rate.date,
         "updated_at": updated_at,
         "history": history,
         "gold_24k": {
             "purity": "24K",
             "current": gold_24k_current,
-            "change": {
-                "absolute": change_24k.absolute if change_24k is not None else None,
-                "percentage": change_24k.percentage if change_24k is not None else None,
-            },
+            "change": _change_dict(change_24k),
+            "date": rate_24k.date if rate_24k is not None else None,
             "history": history_24k if history_24k is not None else [],
+        },
+        "silver": {
+            "asset": "Silver",
+            "unit_note": "Per gram; also shown per 100g and per kg",
+            "source": silver.source if silver is not None else "Goodreturns",
+            "source_url": silver_source_url or "",
+            "current": silver_current,
+            "change": _change_dict(change_silver),
+            "date": silver.date if silver is not None else None,
+            "history": history_silver if history_silver is not None else [],
         },
     }
 

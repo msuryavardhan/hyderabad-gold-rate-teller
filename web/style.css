@@ -15,6 +15,11 @@
   --accent-24k: #b8860b;
   --accent-24k-strong: #8a6508;
   --accent-24k-soft: #f2e7c9;
+  /* Cool, neutral tones for Silver -- deliberately distinct from Gold's
+     warm amber palette, per the "silver/neutral design language" brief. */
+  --accent-silver: #64748b;
+  --accent-silver-strong: #475569;
+  --accent-silver-soft: #eef1f4;
   --up-bg: #e7f6ec;
   --up-text: #167a3d;
   --down-bg: #fbe9e9;
@@ -39,6 +44,9 @@
     --accent-24k: #e8c04d;
     --accent-24k-strong: #f5d876;
     --accent-24k-soft: #3a2f0d;
+    --accent-silver: #94a3b8;
+    --accent-silver-strong: #cbd5e1;
+    --accent-silver-soft: #262b32;
     --up-bg: #133423;
     --up-text: #5fd68b;
     --down-bg: #3a1c1c;
@@ -58,6 +66,10 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -65,6 +77,75 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.45;
   overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* --- Top navigation --- */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.navbar-inner {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nav-brand {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-links {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nav-links a:hover,
+.nav-links a:focus-visible {
+  background: var(--neutral-bg);
+  color: var(--text);
+}
+
+.nav-links a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+@media (max-width: 380px) {
+  .nav-brand { font-size: 0.85rem; }
+  .nav-links a { padding: 0 7px; font-size: 0.72rem; }
 }
 
 .page {
@@ -107,6 +188,143 @@ body {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.subtitle-sub {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+/* --- Asset sections (Gold / Silver) --- */
+
+.asset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-margin-top: 64px; /* keeps the sticky navbar from covering the heading when jumped to */
+}
+
+.section-heading {
+  padding: 4px 4px 0;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.gold-theme .section-heading h2 {
+  color: var(--accent-strong);
+}
+
+.silver-theme .section-heading h2 {
+  color: var(--accent-silver-strong);
+}
+
+.section-heading p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.asset-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 420px) {
+  .asset-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Gold/24K cards are <button> elements (selectable -- clicking one also
+   switches the chart below to that purity), so reset default button
+   chrome back to look exactly like the existing .card styling. */
+.rate-card {
+  display: block;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: box-shadow 120ms, transform 120ms;
+}
+
+.rate-card[aria-pressed="true"] {
+  box-shadow: var(--shadow), 0 0 0 2px var(--accent);
+}
+
+.rate-card-24k[aria-pressed="true"] {
+  box-shadow: var(--shadow), 0 0 0 2px var(--accent-24k);
+}
+
+.rate-card:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.rate-card:active {
+  transform: scale(0.99);
+}
+
+.previous-line {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.previous-line span:not(.previous-caption) {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.previous-caption {
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+
+/* --- Purity toggle (Gold chart: 22K / 24K) --- */
+
+.purity-toggle {
+  display: flex;
+  gap: 6px;
+  background: var(--neutral-bg);
+  padding: 4px;
+  border-radius: 999px;
+  margin: 12px 0 0;
+  width: fit-content;
+}
+
+.purity-btn {
+  min-height: 36px;
+  padding: 4px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.purity-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.purity-btn[data-purity="24K"][aria-pressed="true"] {
+  background: var(--accent-24k);
+}
+
+.purity-btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 main {
@@ -292,6 +510,19 @@ main {
   border-top: 1px solid var(--border);
 }
 
+/* When .meta-row is itself a standalone .card (not nested inside
+   another card's bottom section), it shouldn't carry the "divider"
+   styling meant for nesting. */
+.meta-row.card {
+  margin-top: 0;
+  padding-top: 20px;
+  border-top: none;
+}
+
+.meta-row:has(.meta-item:only-child) {
+  grid-template-columns: 1fr;
+}
+
 .meta-item dt {
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -323,6 +554,16 @@ main {
 .rate-card-24k .change-pill.down {
   background: var(--down-bg);
   color: var(--down-text);
+}
+
+/* --- Silver card: same layout, cool/neutral accent --- */
+
+.silver-rate-card .rupee {
+  color: var(--accent-silver-strong);
+}
+
+.silver-rate-card .rate-tile {
+  background: var(--accent-silver-soft);
 }
 
 .chart-subheading {
@@ -392,7 +633,7 @@ main {
   width: 100%;
 }
 
-#chart {
+.chart-wrap svg {
   width: 100%;
   height: auto;
   display: block;
@@ -442,27 +683,51 @@ main {
   pointer-events: none;
 }
 
-/* The 24K chart reuses the same chart-* classes but with its own accent
-   colour, scoped to its wrapper, so the two charts read as distinct. */
-#chart-wrap-24k .chart-line {
+/* The Gold chart shows either 22K or 24K history (one toggleable chart,
+   not two) -- a class swapped by JS on the wrapper recolors it to match
+   whichever purity is currently selected. */
+.chart-wrap.purity-24k .chart-line {
   stroke: var(--accent-24k);
 }
 
-#chart-wrap-24k .chart-fill {
+.chart-wrap.purity-24k .chart-fill {
   fill: var(--accent-24k-soft);
 }
 
-#chart-wrap-24k .chart-dot,
-#chart-wrap-24k .chart-active-dot {
+.chart-wrap.purity-24k .chart-dot,
+.chart-wrap.purity-24k .chart-active-dot {
   fill: var(--accent-24k-strong);
 }
 
-#chart-wrap-24k .chart-hit:focus-visible {
+.chart-wrap.purity-24k .chart-hit:focus-visible {
   fill: var(--accent-24k-soft);
 }
 
-#chart-tooltip-24k .chart-tooltip-value {
+#gold-chart-tooltip.purity-24k .chart-tooltip-value {
   color: var(--accent-24k-strong);
+}
+
+/* The Silver chart reuses the same chart-* classes but with its own
+   cool/neutral accent, scoped to its wrapper. */
+#silver-chart-wrap .chart-line {
+  stroke: var(--accent-silver);
+}
+
+#silver-chart-wrap .chart-fill {
+  fill: var(--accent-silver-soft);
+}
+
+#silver-chart-wrap .chart-dot,
+#silver-chart-wrap .chart-active-dot {
+  fill: var(--accent-silver-strong);
+}
+
+#silver-chart-wrap .chart-hit:focus-visible {
+  fill: var(--accent-silver-soft);
+}
+
+#silver-chart-tooltip .chart-tooltip-value {
+  color: var(--accent-silver-strong);
 }
 
 .chart-tooltip {
@@ -618,6 +883,10 @@ main {
 
 .recent-table td.value-24k {
   color: var(--accent-24k-strong);
+}
+
+.recent-table td.value-silver {
+  color: var(--accent-silver-strong);
 }
 
 .recent-table td.value-unavailable {

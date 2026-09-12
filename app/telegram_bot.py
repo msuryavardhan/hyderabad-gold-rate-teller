@@ -58,19 +58,30 @@ def _previous_line(previous_rate: Optional[float]) -> str:
     return f"₹{format_inr(previous_rate)} / gram"
 
 
-def _purity_block(heading: str, rate_per_gram: float, change: Optional[RateChange], previous_rate: Optional[float]) -> str:
-    """One purity's section of the message: heading, rate, previous rate,
-    change, and 8g/10g -- all derived from real, already-computed values
-    (never re-fetched or estimated here)."""
-    rate_8g = rate_per_gram * 8
-    rate_10g = rate_per_gram * 10
+def _asset_block(
+    heading: str,
+    rate_per_gram: float,
+    change: Optional[RateChange],
+    previous_rate: Optional[float],
+    qty_a: float,
+    qty_a_label: str,
+    qty_b: float,
+    qty_b_label: str,
+) -> str:
+    """One asset's section of the message: heading, rate, previous rate,
+    change, and two quantity lines -- all derived from real, already-
+    computed values (never re-fetched or estimated here). Gold passes
+    (8, "8g", 10, "10g"); silver passes (100, "100g", 1000, "1kg") -- its
+    own sensible units, never gold's."""
+    value_a = rate_per_gram * qty_a
+    value_b = rate_per_gram * qty_b
     return (
         f"{heading}\n"
         f"₹{format_inr(rate_per_gram)} / gram\n"
         f"Previous: {_previous_line(previous_rate)}\n"
         f"Change: {_change_line(change)}\n"
-        f"8g: ₹{format_inr(rate_8g)}\n"
-        f"10g: ₹{format_inr(rate_10g)}"
+        f"{qty_a_label}: ₹{format_inr(value_a)}\n"
+        f"{qty_b_label}: ₹{format_inr(value_b)}"
     )
 
 
@@ -82,36 +93,51 @@ def build_message(
     rate_24k_per_gram: Optional[float] = None,
     change_24k: Optional[RateChange] = None,
     previous_rate_24k: Optional[float] = None,
+    rate_silver_per_gram: Optional[float] = None,
+    change_silver: Optional[RateChange] = None,
+    previous_rate_silver: Optional[float] = None,
 ) -> str:
-    """Builds the daily Telegram notification for the Hyderabad 22K rate,
-    and -- when 24K data is available this run -- the 24K rate too.
+    """Builds the daily Telegram notification: the Hyderabad 22K gold rate
+    (always), 24K gold and silver when available this run.
 
     All values are whatever the caller already computed from the live
     Goodreturns scrape / JSON history; nothing here fetches, estimates, or
-    fabricates a number. previous_rate/previous_rate_24k should be the
-    immediately preceding *available* historical date for that purity
-    (never an assumed "yesterday"); when None, the message says
+    fabricates a number. Each asset's previous_rate should be the
+    immediately preceding *available* historical date for that specific
+    asset (never an assumed "yesterday", and never one asset's previous
+    rate used for another's change); when None, the message says
     "Previous: Not available" and the corresponding change is not shown
     as a real number either (it must itself be None in that case).
 
-    rate_24k_per_gram is optional: when None (24K unavailable this run),
-    the message contains only the 22K section -- no 24K block is
-    fabricated or shown as zero.
+    rate_24k_per_gram / rate_silver_per_gram are each optional and
+    independent: when either is None (unavailable this run), that asset's
+    block is omitted entirely -- never fabricated or shown as zero.
     """
-    block_22k = _purity_block("22K / 916 Gold", rate_per_gram, change, previous_rate)
+    block_22k = _asset_block("22K / 916 Gold", rate_per_gram, change, previous_rate, 8, "8g", 10, "10g")
 
     lines = [
-        "🪙 Hyderabad Gold Rate",
+        "🪙 Hyderabad Gold & Silver Rate",
         "",
         f"📅 {_display_date(date)}",
+        "",
+        "GOLD",
         "",
         block_22k,
     ]
 
     if rate_24k_per_gram is not None:
-        block_24k = _purity_block("24K Gold", rate_24k_per_gram, change_24k, previous_rate_24k)
+        block_24k = _asset_block("24K Gold", rate_24k_per_gram, change_24k, previous_rate_24k, 8, "8g", 10, "10g")
         lines.append("")
         lines.append(block_24k)
+
+    if rate_silver_per_gram is not None:
+        block_silver = _asset_block(
+            "Silver", rate_silver_per_gram, change_silver, previous_rate_silver, 100, "100g", 1000, "1kg"
+        )
+        lines.append("")
+        lines.append("SILVER")
+        lines.append("")
+        lines.append(block_silver)
 
     lines.append("")
     lines.append("Source: Goodreturns")
