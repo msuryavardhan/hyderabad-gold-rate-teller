@@ -4,16 +4,16 @@
   "city": "Hyderabad",
   "purity": "22K",
   "current": {
-    "rate_per_gram": 13765.0,
-    "rate_8g": 110120.0,
-    "rate_10g": 137650.0
+    "rate_per_gram": 13640.0,
+    "rate_8g": 109120.0,
+    "rate_10g": 136400.0
   },
   "change": {
-    "absolute": -230.0,
-    "percentage": -1.64
+    "absolute": -125.0,
+    "percentage": -0.91
   },
-  "date": "2026-09-28",
-  "updated_at": "2026-09-28T10:05:20+00:00",
+  "date": "2026-09-29",
+  "updated_at": "2026-09-29T10:03:41+00:00",
   "history": [
     {
       "date": "2026-09-02",
@@ -122,20 +122,24 @@
     {
       "date": "2026-09-28",
       "rate_per_gram": 13765.0
+    },
+    {
+      "date": "2026-09-29",
+      "rate_per_gram": 13640.0
     }
   ],
   "gold_24k": {
     "purity": "24K",
     "current": {
-      "rate_per_gram": 15017.0,
-      "rate_8g": 120136.0,
-      "rate_10g": 150170.0
+      "rate_per_gram": 14880.0,
+      "rate_8g": 119040.0,
+      "rate_10g": 148800.0
     },
     "change": {
-      "absolute": -251.0,
-      "percentage": -1.64
+      "absolute": -137.0,
+      "percentage": -0.91
     },
-    "date": "2026-09-28",
+    "date": "2026-09-29",
     "history": [
       {
         "date": "2026-09-02",
@@ -244,6 +248,10 @@
       {
         "date": "2026-09-28",
         "rate_per_gram": 15017.0
+      },
+      {
+        "date": "2026-09-29",
+        "rate_per_gram": 14880.0
       }
     ]
   },
@@ -253,15 +261,15 @@
     "source": "Goodreturns",
     "source_url": "https://www.goodreturns.in/silver-rates/hyderabad.html",
     "current": {
-      "rate_per_gram": 245.0,
-      "rate_100g": 24500.0,
-      "rate_1kg": 245000.0
+      "rate_per_gram": 240.0,
+      "rate_100g": 24000.0,
+      "rate_1kg": 240000.0
     },
     "change": {
       "absolute": -5.0,
-      "percentage": -2.0
+      "percentage": -2.04
     },
-    "date": "2026-09-28",
+    "date": "2026-09-29",
     "history": [
       {
         "date": "2026-09-03",
@@ -366,6 +374,10 @@
       {
         "date": "2026-09-28",
         "rate_per_gram": 245.0
+      },
+      {
+        "date": "2026-09-29",
+        "rate_per_gram": 240.0
       }
     ]
   }
