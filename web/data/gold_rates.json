@@ -9,11 +9,11 @@
     "rate_10g": 131950.0
   },
   "change": {
-    "absolute": 60.0,
-    "percentage": 0.46
+    "absolute": 0.0,
+    "percentage": 0.0
   },
-  "date": "2026-10-28",
-  "updated_at": "2026-10-28T09:57:01+00:00",
+  "date": "2026-10-29",
+  "updated_at": "2026-10-29T10:19:45+00:00",
   "history": [
     {
       "date": "2026-09-02",
@@ -242,6 +242,10 @@
     {
       "date": "2026-10-28",
       "rate_per_gram": 13195.0
+    },
+    {
+      "date": "2026-10-29",
+      "rate_per_gram": 13195.0
     }
   ],
   "gold_24k": {
@@ -252,10 +256,10 @@
       "rate_10g": 143950.0
     },
     "change": {
-      "absolute": 66.0,
-      "percentage": 0.46
+      "absolute": 0.0,
+      "percentage": 0.0
     },
-    "date": "2026-10-28",
+    "date": "2026-10-29",
     "history": [
       {
         "date": "2026-09-02",
@@ -484,6 +488,10 @@
       {
         "date": "2026-10-28",
         "rate_per_gram": 14395.0
+      },
+      {
+        "date": "2026-10-29",
+        "rate_per_gram": 14395.0
       }
     ]
   },
@@ -493,15 +501,15 @@
     "source": "Goodreturns",
     "source_url": "https://www.goodreturns.in/silver-rates/hyderabad.html",
     "current": {
-      "rate_per_gram": 220.0,
-      "rate_100g": 22000.0,
-      "rate_1kg": 220000.0
+      "rate_per_gram": 215.0,
+      "rate_100g": 21500.0,
+      "rate_1kg": 215000.0
     },
     "change": {
-      "absolute": 0.0,
-      "percentage": 0.0
+      "absolute": -5.0,
+      "percentage": -2.27
     },
-    "date": "2026-10-28",
+    "date": "2026-10-29",
     "history": [
       {
         "date": "2026-09-03",
@@ -726,6 +734,10 @@
       {
         "date": "2026-10-28",
         "rate_per_gram": 220.0
+      },
+      {
+        "date": "2026-10-29",
+        "rate_per_gram": 215.0
       }
     ]
   }
