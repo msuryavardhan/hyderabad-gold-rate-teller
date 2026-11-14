@@ -4,16 +4,16 @@
   "city": "Hyderabad",
   "purity": "22K",
   "current": {
-    "rate_per_gram": 12695.0,
-    "rate_8g": 101560.0,
-    "rate_10g": 126950.0
+    "rate_per_gram": 12615.0,
+    "rate_8g": 100920.0,
+    "rate_10g": 126150.0
   },
   "change": {
-    "absolute": -120.0,
-    "percentage": -0.94
+    "absolute": 25.0,
+    "percentage": 0.2
   },
-  "date": "2026-11-13",
-  "updated_at": "2026-11-13T11:24:28+00:00",
+  "date": "2026-11-14",
+  "updated_at": "2026-11-14T10:47:29+00:00",
   "history": [
     {
       "date": "2026-09-02",
@@ -305,21 +305,25 @@
     },
     {
       "date": "2026-11-13",
-      "rate_per_gram": 12695.0
+      "rate_per_gram": 12590.0
+    },
+    {
+      "date": "2026-11-14",
+      "rate_per_gram": 12615.0
     }
   ],
   "gold_24k": {
     "purity": "24K",
     "current": {
-      "rate_per_gram": 13849.0,
-      "rate_8g": 110792.0,
-      "rate_10g": 138490.0
+      "rate_per_gram": 13762.0,
+      "rate_8g": 110096.0,
+      "rate_10g": 137620.0
     },
     "change": {
-      "absolute": -131.0,
-      "percentage": -0.94
+      "absolute": 27.0,
+      "percentage": 0.2
     },
-    "date": "2026-11-13",
+    "date": "2026-11-14",
     "history": [
       {
         "date": "2026-09-02",
@@ -611,7 +615,11 @@
       },
       {
         "date": "2026-11-13",
-        "rate_per_gram": 13849.0
+        "rate_per_gram": 13735.0
+      },
+      {
+        "date": "2026-11-14",
+        "rate_per_gram": 13762.0
       }
     ]
   },
@@ -626,10 +634,10 @@
       "rate_1kg": 195000.0
     },
     "change": {
-      "absolute": -5.0,
-      "percentage": -2.5
+      "absolute": 0.0,
+      "percentage": 0.0
     },
-    "date": "2026-11-13",
+    "date": "2026-11-14",
     "history": [
       {
         "date": "2026-09-03",
@@ -917,6 +925,10 @@
       },
       {
         "date": "2026-11-13",
+        "rate_per_gram": 195.0
+      },
+      {
+        "date": "2026-11-14",
         "rate_per_gram": 195.0
       }
     ]
