@@ -9,11 +9,11 @@
     "rate_10g": 126150.0
   },
   "change": {
-    "absolute": 25.0,
-    "percentage": 0.2
+    "absolute": 0.0,
+    "percentage": 0.0
   },
-  "date": "2026-11-14",
-  "updated_at": "2026-11-14T10:47:29+00:00",
+  "date": "2026-11-15",
+  "updated_at": "2026-11-15T11:22:42+00:00",
   "history": [
     {
       "date": "2026-09-02",
@@ -310,6 +310,10 @@
     {
       "date": "2026-11-14",
       "rate_per_gram": 12615.0
+    },
+    {
+      "date": "2026-11-15",
+      "rate_per_gram": 12615.0
     }
   ],
   "gold_24k": {
@@ -320,10 +324,10 @@
       "rate_10g": 137620.0
     },
     "change": {
-      "absolute": 27.0,
-      "percentage": 0.2
+      "absolute": 0.0,
+      "percentage": 0.0
     },
-    "date": "2026-11-14",
+    "date": "2026-11-15",
     "history": [
       {
         "date": "2026-09-02",
@@ -620,6 +624,10 @@
       {
         "date": "2026-11-14",
         "rate_per_gram": 13762.0
+      },
+      {
+        "date": "2026-11-15",
+        "rate_per_gram": 13762.0
       }
     ]
   },
@@ -637,7 +645,7 @@
       "absolute": 0.0,
       "percentage": 0.0
     },
-    "date": "2026-11-14",
+    "date": "2026-11-15",
     "history": [
       {
         "date": "2026-09-03",
@@ -929,6 +937,10 @@
       },
       {
         "date": "2026-11-14",
+        "rate_per_gram": 195.0
+      },
+      {
+        "date": "2026-11-15",
         "rate_per_gram": 195.0
       }
     ]
